@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>D1N1 — Control de Accesos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root{
+    --bg:#0F1113;
+    --surface:#1B1E22;
+    --surface-2:#24282D;
+    --border:#33383F;
+    --text:#F4F2EC;
+    --muted:#9BA0A8;
+    --ok:#34D399;
+    --ok-dim:#0F2A22;
+    --bad:#F2685A;
+    --bad-dim:#301613;
+    --warn:#F5B942;
+    --warn-dim:#2E2410;
+    --accent:#6E7BFF;
+    --accent-dim:#1B1E3A;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    padding:0 20px 80px;
+  }
+  .wrap{max-width:900px;margin:0 auto;}
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:22px 0;border-bottom:1px solid var(--border);margin-bottom:8px;
+    flex-wrap:wrap;gap:14px;
+  }
+  .brand{display:flex;align-items:center;gap:14px;}
+  .brand img{height:40px;width:auto;display:block;}
+  .brand-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;}
+  .who{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted);}
+  .who .role-badge{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+    padding:3px 9px;border-radius:20px;background:var(--accent-dim);color:var(--accent);
+  }
+  header.hero{padding:40px 0 30px;}
+  h1{
+    font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:34px;
+    line-height:1.1;margin:0 0 12px;letter-spacing:-.01em;
+  }
+  header.hero p{color:var(--muted);font-size:15px;line-height:1.6;max-width:560px;margin:0;}
+  .card{
+    background:var(--surface);border:1px solid var(--border);border-radius:16px;
+    padding:28px 30px;margin-bottom:22px;
+  }
+  .card.narrow{max-width:420px;margin-left:auto;margin-right:auto;}
+  .step-head{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
+  .step-num{
+    font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:13px;color:var(--bg);
+    background:var(--accent);width:26px;height:26px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .step-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;}
+  .step-desc{color:var(--muted);font-size:14px;line-height:1.6;margin:6px 0 20px 38px;}
+  .drop{
+    margin-left:38px;border:1.5px dashed var(--border);border-radius:12px;padding:22px;
+    display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  }
+  label.field-label{
+    display:block;font-size:12px;color:var(--muted);text-transform:uppercase;
+    letter-spacing:.05em;margin:0 0 6px;font-family:'JetBrains Mono',monospace;
+  }
+  input[type=text],input[type=password],input[type=date],select{
+    width:100%;background:var(--surface-2);border:1px solid var(--border);
+    color:var(--text);border-radius:9px;padding:11px 13px;font-size:14px;
+    font-family:'Inter',sans-serif;
+  }
+  input:focus,select:focus{outline:none;border-color:var(--accent);}
+  .field{margin-bottom:16px;}
+  .btn{
+    font-family:'Inter',sans-serif;font-weight:600;font-size:14px;color:var(--text);
+    background:var(--surface-2);border:1px solid var(--border);border-radius:9px;
+    padding:10px 18px;cursor:pointer;transition:background .15s, border-color .15s;
+  }
+  .btn:hover{background:#2C3138;border-color:#454B54;}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .btn.primary:hover{filter:brightness(1.08);}
+  .btn.danger{background:var(--bad-dim);border-color:var(--bad);color:var(--bad);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn.full{width:100%;}
+  .btn.small{padding:6px 12px;font-size:12px;}
+  input[type=file]{display:none;}
+  .file-status{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--muted);}
+  .file-status.loaded{color:var(--ok);}
+  .process-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-top:8px;}
+  .progress-wrap{flex:1;min-width:200px;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;display:none;}
+  .progress-wrap.active{display:block;}
+  .progress-bar{height:100%;width:0%;background:var(--accent);transition:width .15s;}
+  .progress-label{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:22px;}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;}
+  .stat-num{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;line-height:1;}
+  .stat-label{font-size:12px;color:var(--muted);margin-top:8px;text-transform:uppercase;letter-spacing:.06em;}
+  .stat.ok .stat-num{color:var(--ok);}
+  .stat.bad .stat-num{color:var(--bad);}
+  .stat.warn .stat-num{color:var(--warn);}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th{
+    text-align:left;font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--border);
+  }
+  td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  tr.total-row td{font-weight:700;border-top:2px solid var(--border);}
+  .code-cell{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--muted);}
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;}
+  .badge.ok{background:var(--ok-dim);color:var(--ok);}
+  .badge.bad{background:var(--bad-dim);color:var(--bad);}
+  .badge.warn{background:var(--warn-dim);color:var(--warn);}
+  .badge.neutral{background:var(--surface-2);color:var(--muted);}
+  .badge-dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+  .section-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;margin:0 0 4px;}
+  .section-sub{color:var(--muted);font-size:13px;margin:0 0 18px;}
+  .empty-note{color:var(--muted);font-size:13px;padding:12px 0;}
+  .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:22px;}
+  .hidden{display:none;}
+  #canvasHolder{display:none;}
+  .table-wrap{overflow-x:auto;}
+  .help{
+    background:var(--surface-2);border-radius:10px;padding:14px 16px;font-size:13px;
+    color:var(--muted);line-height:1.6;margin:14px 0 0 38px;
+  }
+  .help code{font-family:'JetBrains Mono',monospace;background:var(--bg);padding:1px 6px;border-radius:4px;color:var(--text);}
+  .event-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;}
+  .event-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;
+    cursor:pointer;transition:border-color .15s, transform .1s;
+  }
+  .event-card:hover{border-color:var(--accent);}
+  .event-card .ev-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;margin-bottom:6px;}
+  .event-card .ev-meta{font-size:12px;color:var(--muted);line-height:1.6;}
+  .error-msg{color:var(--bad);font-size:13px;margin-top:8px;}
+  .link-btn{background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;padding:0;font-family:'Inter',sans-serif;}
+  .link-btn:hover{text-decoration:underline;}
+  .nav-tabs{display:flex;gap:8px;margin-bottom:24px;}
+  ::-webkit-scrollbar{height:6px;width:6px;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+</style>
+</head>
+<body>
+<div id="canvasHolder"><canvas id="workCanvas"></canvas></div>
+<div class="wrap" id="app"></div>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+const SUPABASE_URL = "https://dzbletsfoassdcnszuqj.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6YmxldHNmb2Fzc2RjbnN6dXFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwODkyNjUsImV4cCI6MjEwMTY2NTI2NX0.RQa_DLKUBy9UgNAf8mjA_nVdaEqDn993yoqmOx-L8I8";
+const LOGO_URL = SUPABASE_URL + "/functions/v1/logo";
+let LOGO_SRC = "";
+async function loadLogo(){
+  try{
+    const res = await fetch(LOGO_URL);
+    const blob = await res.blob();
+    LOGO_SRC = await new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = ()=> resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }catch(e){ LOGO_SRC = ''; }
+}
+
+let users = [];
+let events = [];
+let currentUser = null;
+let screen = 'loading';
+let currentEventId = null;
+let currentReport = null;
+let csvFileSel = null;
+let zipFileSel = null;
+let showCreateEvent = false;
+let uiError = '';
+let processing = false;
+
+function stripAccents(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function normCode(s){ return stripAccents(s).trim().toUpperCase(); }
+function genId(){ return 'ev_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(ts){ if(!ts) return '—'; const d = new Date(ts); return d.toLocaleString('es-ES'); }
+
+async function sha256Hex(str){
+  const enc = new TextEncoder().encode(str);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+const SB_HEADERS = {
+  'apikey': SUPABASE_ANON_KEY,
+  'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+  'Content-Type': 'application/json'
+};
+
+async function loadUsers(){
+  try{
+    const res = await fetch(SUPABASE_URL + '/rest/v1/portal_users?select=username,pass_hash,role&order=created_at.asc', { headers: SB_HEADERS });
+    if(!res.ok) return null;
+    const rows = await res.json();
+    return rows.map(r=>({ username: r.username, passHash: r.pass_hash, role: r.role }));
+  }catch(e){ return null; }
+}
+async function createUser(username, passHash, role){
+  const res = await fetch(SUPABASE_URL + '/rest/v1/portal_users', {
+    method: 'POST',
+    headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'return=minimal' }),
+    body: JSON.stringify([{ username, pass_hash: passHash, role }])
+  });
+  return res.ok;
+}
+async function deleteUser(username){
+  const res = await fetch(SUPABASE_URL + '/rest/v1/portal_users?username=eq.' + encodeURIComponent(username), {
+    method: 'DELETE',
+    headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'return=minimal' })
+  });
+  return res.ok;
+}
+
+async function loadEvents(){
+  try{
+    const res = await fetch(SUPABASE_URL + '/rest/v1/portal_events?select=*&order=created_at.desc', { headers: SB_HEADERS });
+    if(!res.ok) return [];
+    const rows = await res.json();
+    return rows.map(r=>({
+      id: r.id, nombre: r.nombre, fecha: r.fecha, recinto: r.recinto,
+      createdBy: r.created_by, createdAt: new Date(r.created_at).getTime(),
+      hasReport: r.has_report, lastGenerated: r.last_generated ? new Date(r.last_generated).getTime() : null
+    }));
+  }catch(e){ return []; }
+}
+async function createEvent(ev){
+  const res = await fetch(SUPABASE_URL + '/rest/v1/portal_events', {
+    method: 'POST',
+    headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'return=minimal' }),
+    body: JSON.stringify([{
+      id: ev.id, nombre: ev.nombre, fecha: ev.fecha, recinto: ev.recinto,
+      created_by: ev.createdBy, has_report: false
+    }])
+  });
+  return res.ok;
+}
+async function markEventReportSaved(id, generatedAtMs){
+  const res = await fetch(SUPABASE_URL + '/rest/v1/portal_events?id=eq.' + encodeURIComponent(id), {
+    method: 'PATCH',
+    headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'return=minimal' }),
+    body: JSON.stringify({ has_report: true, last_generated: new Date(generatedAtMs).toISOString() })
+  });
+  return res.ok;
+}
+
+async function loadReport(id){
+  try{
+    const res = await fetch(SUPABASE_URL + '/rest/v1/portal_event_reports?event_id=eq.' + encodeURIComponent(id) + '&select=data', { headers: SB_HEADERS });
+    if(!res.ok) return null;
+    const rows = await res.json();
+    if(!rows.length) return null;
+    return rows[0].data;
+  }catch(e){ return null; }
+}
+async function saveReport(id, obj){
+  try{
+    await fetch(SUPABASE_URL + '/rest/v1/portal_event_reports?on_conflict=event_id', {
+      method: 'POST',
+      headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify([{
+        event_id: id, data: obj,
+        generated_at: obj.generatedAt ? new Date(obj.generatedAt).toISOString() : null,
+        generated_by: obj.generatedBy || null
+      }])
+    });
+  }catch(e){ console.error('supabase error', e); }
+}
+
+async function init(){
+  screen = 'loading'; render();
+  const u = await loadUsers();
+  if(!u || u.length===0){ users = []; screen = 'setup'; render(); return; }
+  users = u;
+  screen = 'login'; render();
+}
+
+function topBarHtml(){
+  return `
+  <div class="topbar">
+    <div class="brand">
+      <img src="${LOGO_SRC}" alt="D1N1">
+      <span class="brand-name">Control de accesos</span>
+    </div>
+    <div class="who">
+      <span>${escapeHtml(currentUser.username)}</span>
+      <span class="role-badge">${currentUser.role === 'admin' ? 'Administrador' : 'Usuario'}</span>
+      <button class="btn small" id="btnLogout">Cerrar sesion</button>
+    </div>
+  </div>`;
+}
+
+function renderLoading(){
+  document.getElementById('app').innerHTML = `<div style="padding:80px 0;text-align:center;color:var(--muted);">Cargando...</div>`;
+}
+
+function renderSetup(){
+  document.getElementById('app').innerHTML = `
+  <header class="hero" style="text-align:center;">
+    <div style="display:flex;justify-content:center;margin-bottom:18px;"><img src="${LOGO_SRC}" alt="D1N1" style="height:52px;"></div>
+    <h1>Configura tu cuenta de Administrador</h1>
+    <p style="margin:0 auto;">No hay ninguna cuenta guardada todavia en este portal. Crea la cuenta de Administrador con la que gestionaras eventos y usuarios. Esta pantalla desaparecera en cuanto la crees, y no volvera a aparecer mientras exista al menos una cuenta.</p>
+  </header>
+  <div class="card narrow">
+    <div class="field">
+      <label class="field-label">Usuario</label>
+      <input type="text" id="setupUser" autocomplete="off">
+    </div>
+    <div class="field">
+      <label class="field-label">Contrasena</label>
+      <input type="password" id="setupPass">
+    </div>
+    <div class="field">
+      <label class="field-label">Repite la contrasena</label>
+      <input type="password" id="setupPass2">
+    </div>
+    <button class="btn primary full" id="btnSetup">Crear cuenta de Administrador</button>
+    <div class="error-msg" id="setupError">${escapeHtml(uiError)}</div>
+  </div>`;
+  document.getElementById('btnSetup').onclick = async ()=>{
+    const u = document.getElementById('setupUser').value.trim();
+    const p = document.getElementById('setupPass').value;
+    const p2 = document.getElementById('setupPass2').value;
+    if(!u || !p){ uiError = 'Rellena usuario y contrasena.'; renderSetup(); return; }
+    if(p !== p2){ uiError = 'Las contrasenas no coinciden.'; renderSetup(); return; }
+    const passHash = await sha256Hex(p);
+    const ok = await createUser(u, passHash, 'admin');
+    if(!ok){ uiError = 'No se pudo crear la cuenta. Comprueba tu conexion e intentalo de nuevo.'; renderSetup(); return; }
+    users = await loadUsers();
+    currentUser = { username: u, role: 'admin' };
+    events = await loadEvents();
+    uiError = '';
+    screen = 'dashboard'; render();
+  };
+}
+
+function renderLogin(){
+  document.getElementById('app').innerHTML = `
+  <header class="hero" style="text-align:center;">
+    <div style="display:flex;justify-content:center;margin-bottom:18px;"><img src="${LOGO_SRC}" alt="D1N1" style="height:52px;"></div>
+    <h1>Control de accesos</h1>
+    <p style="margin:0 auto;">Inicia sesion para gestionar eventos e informes de accesos.</p>
+  </header>
+  <div class="card narrow">
+    <div class="field">
+      <label class="field-label">Usuario</label>
+      <input type="text" id="loginUser" autocomplete="username">
+    </div>
+    <div class="field">
+      <label class="field-label">Contrasena</label>
+      <input type="password" id="loginPass" autocomplete="current-password">
+    </div>
+    <button class="btn primary full" id="btnLogin">Entrar</button>
+    <div class="error-msg" id="loginError">${escapeHtml(uiError)}</div>
+  </div>`;
+  const doLogin = async ()=>{
+    const u = document.getElementById('loginUser').value.trim();
+    const p = document.getElementById('loginPass').value;
+    const found = users.find(x=>x.username.toLowerCase() === u.toLowerCase());
+    if(!found){ uiError = 'Usuario o contrasena incorrectos.'; renderLogin(); return; }
+    const hash = await sha256Hex(p);
+    if(hash !== found.passHash){ uiError = 'Usuario o contrasena incorrectos.'; renderLogin(); return; }
+    currentUser = { username: found.username, role: found.role };
+    events = await loadEvents();
+    uiError = '';
+    screen = 'dashboard'; render();
+  };
+  document.getElementById('btnLogin').onclick = doLogin;
+  document.getElementById('loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+}
+
+function renderDashboard(){
+  const isAdmin = currentUser.role === 'admin';
+  const createForm = showCreateEvent ? `
+    <div class="card">
+      <p class="section-title">Crear evento</p>
+      <p class="section-sub">Estos datos apareceran en la cabecera del informe.</p>
+      <div class="field"><label class="field-label">Nombre del evento</label><input type="text" id="evNombre"></div>
+      <div class="field"><label class="field-label">Fecha</label><input type="text" id="evFecha" placeholder="SABADO, 25 JULIO DE 2026"></div>
+      <div class="field"><label class="field-label">Recinto</label><input type="text" id="evRecinto"></div>
+      <div class="actions">
+        <button class="btn primary" id="btnSaveEvent">Guardar evento</button>
+        <button class="btn" id="btnCancelEvent">Cancelar</button>
+      </div>
+      <div class="error-msg" id="evError">${escapeHtml(uiError)}</div>
+    </div>` : '';
+
+  const cards = events.length === 0 ? `<p class="empty-note">Todavia no hay eventos creados.</p>` : `
+    <div class="event-grid">
+    ${events.slice().sort((a,b)=>b.createdAt-a.createdAt).map(ev=>`
+      <div class="event-card" data-id="${ev.id}">
+        <div class="ev-name">${escapeHtml(ev.nombre)}</div>
+        <div class="ev-meta">${escapeHtml(ev.fecha || '')}<br>${escapeHtml(ev.recinto || '')}</div>
+        <div style="margin-top:10px;">
+          ${ev.hasReport ? '<span class="badge ok"><span class="badge-dot"></span>Informe generado</span>' : '<span class="badge neutral"><span class="badge-dot"></span>Sin procesar</span>'}
+        </div>
+      </div>
+    `).join('')}
+    </div>`;
+
+  document.getElementById('app').innerHTML = `
+    ${topBarHtml()}
+    <header class="hero">
+      <h1>Eventos</h1>
+      <p>Selecciona un evento para subir el listado de accesos y las invitaciones, o crea uno nuevo.</p>
+    </header>
+    <div class="actions" style="margin-bottom:22px;">
+      <button class="btn primary" id="btnNewEvent">+ Crear evento</button>
+      ${isAdmin ? `<button class="btn" id="btnGoUsers">Gestionar usuarios</button>` : ''}
+    </div>
+    ${createForm}
+    ${cards}
+  `;
+
+  const logoutBtn = document.getElementById('btnLogout');
+  if(logoutBtn) logoutBtn.onclick = ()=>{ currentUser=null; screen='login'; render(); };
+
+  const btnNewEvent = document.getElementById('btnNewEvent');
+  if(btnNewEvent) btnNewEvent.onclick = ()=>{ showCreateEvent = true; uiError=''; renderDashboard(); };
+
+  const btnGoUsers = document.getElementById('btnGoUsers');
+  if(btnGoUsers) btnGoUsers.onclick = ()=>{ screen='users'; render(); };
+
+  const btnCancelEvent = document.getElementById('btnCancelEvent');
+  if(btnCancelEvent) btnCancelEvent.onclick = ()=>{ showCreateEvent = false; uiError=''; renderDashboard(); };
+
+  const btnSaveEvent = document.getElementById('btnSaveEvent');
+  if(btnSaveEvent) btnSaveEvent.onclick = async ()=>{
+    const nombre = document.getElementById('evNombre').value.trim();
+    const fecha = document.getElementById('evFecha').value.trim();
+    const recinto = document.getElementById('evRecinto').value.trim();
+    if(!nombre){ uiError = 'Ponle un nombre al evento.'; renderDashboard(); return; }
+    const ev = { id: genId(), nombre, fecha, recinto, createdAt: Date.now(), createdBy: currentUser.username, hasReport:false };
+    const ok = await createEvent(ev);
+    if(!ok){ uiError = 'No se pudo crear el evento. Comprueba tu conexion e intentalo de nuevo.'; renderDashboard(); return; }
+    events = await loadEvents();
+    showCreateEvent = false; uiError = '';
+    renderDashboard();
+  };
+
+  document.querySelectorAll('.event-card').forEach(card=>{
+    card.onclick = ()=> openEvent(card.getAttribute('data-id'));
+  });
+}
+
+function renderUsers(){
+  document.getElementById('app').innerHTML = `
+    ${topBarHtml()}
+    <header class="hero">
+      <h1>Usuarios</h1>
+      <p>Crea cuentas para las personas que van a procesar eventos. Solo el Administrador ve esta pantalla.</p>
+    </header>
+    <div class="actions" style="margin-bottom:22px;">
+      <button class="btn" id="btnBackDash">Volver a eventos</button>
+    </div>
+    <div class="card">
+      <p class="section-title">Crear usuario</p>
+      <div class="field"><label class="field-label">Usuario</label><input type="text" id="newUserName"></div>
+      <div class="field"><label class="field-label">Contrasena</label><input type="password" id="newUserPass"></div>
+      <div class="field">
+        <label class="field-label">Rol</label>
+        <select id="newUserRole">
+          <option value="user">Usuario (solo procesa eventos existentes)</option>
+          <option value="admin">Administrador (acceso completo)</option>
+        </select>
+      </div>
+      <button class="btn primary" id="btnAddUser">Crear usuario</button>
+      <div class="error-msg" id="userError">${escapeHtml(uiError)}</div>
+    </div>
+    <div class="card">
+      <p class="section-title">Usuarios existentes</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Usuario</th><th>Rol</th><th></th></tr></thead>
+          <tbody>
+            ${users.map(u=>`
+              <tr>
+                <td>${escapeHtml(u.username)}</td>
+                <td>${u.role==='admin' ? 'Administrador' : 'Usuario'}</td>
+                <td>${u.username!==currentUser.username ? `<button class="btn small danger" data-user="${escapeHtml(u.username)}">Eliminar</button>` : ''}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  document.getElementById('btnLogout').onclick = ()=>{ currentUser=null; screen='login'; render(); };
+  document.getElementById('btnBackDash').onclick = ()=>{ screen='dashboard'; render(); };
+  document.getElementById('btnAddUser').onclick = async ()=>{
+    const u = document.getElementById('newUserName').value.trim();
+    const p = document.getElementById('newUserPass').value;
+    const role = document.getElementById('newUserRole').value;
+    if(!u || !p){ uiError = 'Rellena usuario y contrasena.'; renderUsers(); return; }
+    if(users.find(x=>x.username.toLowerCase()===u.toLowerCase())){ uiError = 'Ese usuario ya existe.'; renderUsers(); return; }
+    const passHash = await sha256Hex(p);
+    const ok = await createUser(u, passHash, role);
+    if(!ok){ uiError = 'No se pudo crear el usuario. Comprueba tu conexion e intentalo de nuevo.'; renderUsers(); return; }
+    users = await loadUsers();
+    uiError = '';
+    renderUsers();
+  };
+  document.querySelectorAll('[data-user]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const name = btn.getAttribute('data-user');
+      if(!confirm('Eliminar al usuario ' + name + '?')) return;
+      await deleteUser(name);
+      users = await loadUsers();
+      renderUsers();
+    };
+  });
+}
+
+async function openEvent(id){
+  currentEventId = id;
+  currentReport = await loadReport(id);
+  csvFileSel = null; zipFileSel = null;
+  screen = 'event'; render();
+}
+
+function getCurrentEvent(){ return events.find(e=>e.id===currentEventId); }
+
+function updateProgressBar(fraction, label){
+  const wrap = document.getElementById('progressWrap');
+  const bar = document.getElementById('progressBar');
+  const lab = document.getElementById('progressLabel');
+  if(wrap) wrap.classList.add('active');
+  if(bar) bar.style.width = Math.round(fraction*100) + '%';
+  if(lab) lab.textContent = label;
+}
+
+function reportTableHtml(report){
+  const rows = report.folders.map(f=>`
+    <tr>
+      <td>${escapeHtml(f.carpeta)}</td>
+      <td>${f.acceden}</td>
+      <td>${f.no_acceden}</td>
+      <td>${f.total}</td>
+    </tr>
+  `).join('');
+  return `
+    <div class="stats">
+      <div class="stat ok"><div class="stat-num">${report.totals.acceden}</div><div class="stat-label">Acceden</div></div>
+      <div class="stat bad"><div class="stat-num">${report.totals.no_acceden}</div><div class="stat-label">No acceden</div></div>
+      <div class="stat"><div class="stat-num">${report.totals.total}</div><div class="stat-label">Total invitaciones</div></div>
+      <div class="stat warn"><div class="stat-num">${report.unreadable.length}</div><div class="stat-label">Paginas sin lectura</div></div>
+    </div>
+    <div class="card">
+      <p class="section-title">Informe por carpeta</p>
+      <p class="section-sub">Generado ${fmtDate(report.generatedAt)} por ${escapeHtml(report.generatedBy||'')}</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Carpeta</th><th>Acceden</th><th>No acceden</th><th>Total invitaciones</th></tr></thead>
+          <tbody>
+            ${rows}
+            <tr class="total-row"><td>Total</td><td>${report.totals.acceden}</td><td>${report.totals.no_acceden}</td><td>${report.totals.total}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    ${report.unreadable.length>0 ? `
+    <div class="card">
+      <p class="section-title">Paginas que no se pudieron leer</p>
+      <p class="section-sub">Se han contado como "no acceden" por precaucion. Revisalas a mano si hace falta.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Carpeta</th><th>Archivo</th><th>Pagina</th></tr></thead>
+          <tbody>
+            ${report.unreadable.map(u=>`<tr><td>${escapeHtml(u.folder)}</td><td class="code-cell">${escapeHtml(u.file)}</td><td>${escapeHtml(String(u.page))}</td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : ''}
+  `;
+}
+
+function renderEvent(){
+  const ev = getCurrentEvent();
+  if(!ev){ screen='dashboard'; render(); return; }
+
+  const uploadSection = `
+    <div class="card">
+      <div class="step-head"><div class="step-num">1</div><div class="step-title">Listado de accesos (CSV)</div></div>
+      <p class="step-desc">El archivo exportado del control de accesos, con los codigos y su fecha de entrada.</p>
+      <div class="drop">
+        <button class="btn" id="btnCsv">Elegir archivo CSV</button>
+        <span class="file-status ${csvFileSel?'loaded':''}" id="csvStatus">${csvFileSel ? csvFileSel.name : 'Ningun archivo cargado'}</span>
+        <input type="file" id="csvInput" accept=".csv,text/csv">
+      </div>
+    </div>
+    <div class="card">
+      <div class="step-head"><div class="step-num">2</div><div class="step-title">Invitaciones (ZIP con carpetas)</div></div>
+      <p class="step-desc">El ZIP con una carpeta por cliente y dentro los PDF de las entradas enviadas.</p>
+      <div class="drop">
+        <button class="btn" id="btnZip">Elegir archivo ZIP</button>
+        <span class="file-status ${zipFileSel?'loaded':''}" id="zipStatus">${zipFileSel ? zipFileSel.name : 'Ningun archivo cargado'}</span>
+        <input type="file" id="zipInput" accept=".zip">
+      </div>
+    </div>
+    <div class="card">
+      <div class="step-head"><div class="step-num">3</div><div class="step-title">Procesar</div></div>
+      <p class="step-desc">Puede tardar uno o dos minutos segun el numero de invitaciones.</p>
+      <div class="process-row">
+        <button class="btn primary" id="btnProcess" ${(!csvFileSel || !zipFileSel || processing) ? 'disabled' : ''}>Procesar entradas</button>
+        <div class="progress-wrap" id="progressWrap"><div class="progress-bar" id="progressBar"></div></div>
+        <span class="progress-label" id="progressLabel"></span>
+      </div>
+    </div>
+  `;
+
+  const reportSection = currentReport ? `
+    ${reportTableHtml(currentReport)}
+    <div class="actions">
+      <button class="btn primary" id="btnDownloadXlsx">Descargar informe (Excel)</button>
+      <button class="btn primary" id="btnDownloadPdf">Descargar informe (PDF)</button>
+      <button class="btn" id="btnReprocess">Volver a procesar</button>
+    </div>
+    <p class="empty-note" id="saveStatusNote">Este informe queda guardado. Se mantendra al volver a entrar en el evento, a no ser que lo proceses de nuevo.</p>
+  ` : '';
+
+  document.getElementById('app').innerHTML = `
+    ${topBarHtml()}
+    <header class="hero">
+      <p style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:0 0 8px;">Evento</p>
+      <h1>${escapeHtml(ev.nombre)}</h1>
+      <p>${escapeHtml(ev.fecha||'')} ${ev.recinto ? '· ' + escapeHtml(ev.recinto) : ''}</p>
+    </header>
+    <div class="actions" style="margin-bottom:10px;">
+      <button class="btn" id="btnBackDash">Volver a eventos</button>
+    </div>
+    ${currentReport ? reportSection : uploadSection}
+  `;
+
+  document.getElementById('btnLogout').onclick = ()=>{ currentUser=null; screen='login'; render(); };
+  document.getElementById('btnBackDash').onclick = ()=>{ screen='dashboard'; render(); };
+
+  if(!currentReport){
+    document.getElementById('btnCsv').onclick = ()=> document.getElementById('csvInput').click();
+    document.getElementById('btnZip').onclick = ()=> document.getElementById('zipInput').click();
+    document.getElementById('csvInput').onchange = (e)=>{ csvFileSel = e.target.files[0] || null; renderEvent(); };
+    document.getElementById('zipInput').onchange = (e)=>{ zipFileSel = e.target.files[0] || null; renderEvent(); };
+    const btnProcess = document.getElementById('btnProcess');
+    if(btnProcess) btnProcess.onclick = handleProcess;
+  } else {
+    document.getElementById('btnDownloadXlsx').onclick = ()=> downloadExcel(ev, currentReport);
+    document.getElementById('btnDownloadPdf').onclick = ()=> downloadPdf(ev, currentReport);
+    document.getElementById('btnReprocess').onclick = ()=>{ currentReport = null; csvFileSel=null; zipFileSel=null; renderEvent(); };
+  }
+}
+
+function splitCsvLine(line, delim){
+  const out=[]; let cur=''; let inQuotes=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(inQuotes){
+      if(ch === '"'){
+        if(line[i+1] === '"'){ cur+='"'; i++; } else { inQuotes=false; }
+      } else cur+=ch;
+    } else {
+      if(ch === '"') inQuotes=true;
+      else if(ch === delim){ out.push(cur); cur=''; }
+      else cur+=ch;
+    }
+  }
+  out.push(cur);
+  return out.map(c=>c.trim());
+}
+
+async function parseCsvCodes(file){
+  const text = await file.text();
+  const lines = text.split(/\r?\n/).filter(l=>l.trim().length>0);
+  const codeStatus = {};
+  if(lines.length===0) return codeStatus;
+  const delim = (lines[0].match(/;/g)||[]).length >= (lines[0].match(/,/g)||[]).length ? ';' : ',';
+  const header = splitCsvLine(lines[0], delim).map(h=>stripAccents(h).toLowerCase().replace(/\s+/g,''));
+  let codeIdx = header.findIndex(h=>h==='codigo');
+  if(codeIdx===-1) codeIdx = 0;
+  let fechaInIdx = header.findIndex(h=>h==='fechain');
+  if(fechaInIdx===-1) fechaInIdx = 7;
+  for(let i=1;i<lines.length;i++){
+    const cells = splitCsvLine(lines[i], delim);
+    if(cells.length <= Math.max(codeIdx, fechaInIdx)) continue;
+    const rawCode = (cells[codeIdx]||'').trim();
+    if(!rawCode) continue;
+    const code = normCode(rawCode.split(/\s+/)[0]);
+    const fechaIn = (cells[fechaInIdx]||'').trim();
+    const accessed = fechaIn.length > 0;
+    codeStatus[code] = codeStatus[code] || accessed;
+  }
+  return codeStatus;
+}
+
+async function processZipFile(file, knownCodes, progressCb){
+  const zip = await JSZip.loadAsync(file);
+  const pdfEntries = [];
+  zip.forEach((relPath, entry)=>{
+    if(!entry.dir && /\.pdf$/i.test(entry.name)) pdfEntries.push(entry);
+  });
+  const ticketList = [];
+  const unreadable = [];
+  for(let i=0;i<pdfEntries.length;i++){
+    const entry = pdfEntries[i];
+    progressCb(i+1, pdfEntries.length, entry.name);
+    const parts = entry.name.split('/').filter(p=>p.length>0);
+    const folder = parts.length>=2 ? parts[parts.length-2] : 'SIN CARPETA';
+    const fileName = parts[parts.length-1];
+    let arrbuf;
+    try{ arrbuf = await entry.async('arraybuffer'); }catch(e){ continue; }
+    let pdf;
+    try{ pdf = await pdfjsLib.getDocument({data: arrbuf}).promise; }
+    catch(e){ unreadable.push({folder, file: fileName, page: '(archivo)'}); continue; }
+    for(let p=1;p<=pdf.numPages;p++){
+      let code = null;
+      try{
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        const freq = {};
+        content.items.forEach(it=>{
+          const s = (it.str||'').trim();
+          if(/^[A-Z0-9]{10,16}$/.test(s)) freq[s] = (freq[s]||0)+1;
+        });
+        // Un PDF de entrada suele repetir dos codigos (el de la entrada y la
+        // referencia de compra). Para no confundirlos, nos quedamos con el
+        // candidato que realmente existe en el listado de accesos (CSV).
+        let best = null, bestCount = 0;
+        Object.keys(freq).forEach(k=>{
+          if(knownCodes.has(k) && freq[k] > bestCount){ best = k; bestCount = freq[k]; }
+        });
+        if(!best){
+          // ningun candidato coincide con el CSV: nos quedamos con el mas
+          // frecuente como ultimo recurso, para no perder el registro.
+          Object.keys(freq).forEach(k=>{ if(freq[k] > bestCount){ best = k; bestCount = freq[k]; } });
+        }
+        code = best;
+      }catch(e){ code = null; }
+      if(code) ticketList.push({ folder, code: normCode(code), file: fileName, page: p });
+      else unreadable.push({ folder, file: fileName, page: p });
+    }
+    await new Promise(r=>setTimeout(r,0));
+  }
+  return { ticketList, unreadable };
+}
+
+function buildReport(ticketList, unreadable, codeStatus){
+  const folderMap = {};
+  function ensure(f){ if(!folderMap[f]) folderMap[f] = { carpeta:f, acceden:0, no_acceden:0, total:0 }; return folderMap[f]; }
+  ticketList.forEach(t=>{
+    const f = ensure(t.folder);
+    f.total++;
+    if(codeStatus[t.code]) f.acceden++; else f.no_acceden++;
+  });
+  unreadable.forEach(u=>{
+    const f = ensure(u.folder);
+    f.total++;
+    f.no_acceden++;
+  });
+  const folders = Object.values(folderMap).sort((a,b)=>a.carpeta.localeCompare(b.carpeta,'es'));
+  const totals = folders.reduce((acc,f)=>{ acc.acceden+=f.acceden; acc.no_acceden+=f.no_acceden; acc.total+=f.total; return acc; }, {acceden:0,no_acceden:0,total:0});
+  return { folders, totals, unreadable };
+}
+
+async function handleProcess(){
+  if(!csvFileSel || !zipFileSel || processing) return;
+  processing = true;
+  renderEvent();
+  updateProgressBar(0, 'Leyendo listado de accesos...');
+  const codeStatus = await parseCsvCodes(csvFileSel);
+  const knownCodes = new Set(Object.keys(codeStatus));
+  updateProgressBar(0, 'Leyendo invitaciones...');
+  const { ticketList, unreadable } = await processZipFile(zipFileSel, knownCodes, (i,total,name)=>{
+    updateProgressBar(i/total, 'Leyendo PDF ' + i + ' de ' + total + ': ' + name);
+  });
+  const report = buildReport(ticketList, unreadable, codeStatus);
+  report.generatedAt = Date.now();
+  report.generatedBy = currentUser.username;
+  currentReport = report;
+
+  // El informe se guarda automaticamente en cuanto se genera, para que
+  // se mantenga al volver a entrar en el evento mas adelante.
+  await saveReport(currentEventId, currentReport);
+  await markEventReportSaved(currentEventId, currentReport.generatedAt);
+  events = await loadEvents();
+
+  processing = false;
+  renderEvent();
+}
+
+async function downloadExcel(ev, report){
+  const btn = document.getElementById('btnDownloadXlsx');
+  if(btn){ btn.disabled = true; btn.textContent = 'Generando Excel...'; }
+  try{
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'D1N1';
+    const ws = wb.addWorksheet('INVITACIONES');
+    ws.columns = [{ width: 26 }, { width: 14 }, { width: 16 }, { width: 22 }];
+
+    const imageId = wb.addImage({ base64: LOGO_SRC, extension: 'png' });
+    ws.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 170, height: 113 } });
+    for(let i=0;i<6;i++) ws.addRow([]);
+
+    let r = ws.addRow(['EVENTO:', ev.nombre || '']);
+    r.font = { bold: true };
+    r = ws.addRow(['FECHA:', ev.fecha || '']);
+    r.font = { bold: true };
+    r = ws.addRow(['RECINTO:', ev.recinto || '']);
+    r.font = { bold: true };
+    r = ws.addRow(['Informe generado:', fmtDate(report.generatedAt) + (report.generatedBy ? ' por ' + report.generatedBy : '')]);
+    r.font = { italic: true, color: { argb: 'FF9BA0A8' } };
+    ws.addRow([]);
+    ws.addRow([]);
+
+    r = ws.addRow(['CARPETA:', 'ACCEDEN', 'NO ACCEDEN', 'TOTAL INVITACIONES']);
+    r.font = { bold: true };
+
+    report.folders.forEach(f=>{
+      ws.addRow([f.carpeta, f.acceden, f.no_acceden, f.total]);
+    });
+
+    r = ws.addRow(['TOTAL:', report.totals.acceden, report.totals.no_acceden, report.totals.total]);
+    r.font = { bold: true };
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const safeName = (ev.nombre || 'evento').replace(/[^a-zA-Z0-9]+/g, '_');
+    a.download = 'Informe_' + safeName + '.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = 'Descargar informe (Excel)'; }
+  }
+}
+
+async function downloadPdf(ev, report){
+  const btn = document.getElementById('btnDownloadPdf');
+  if(btn){ btn.disabled = true; btn.textContent = 'Generando PDF...'; }
+  try{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const GOLD = [201, 158, 58];
+    const GOLD_LIGHT = [250, 240, 214];
+    const DARK = [35, 35, 35];
+    const MUTED = [130, 130, 130];
+
+    function drawWatermarkAndFooter(pageNumber, pageCount){
+      doc.saveGraphicsState();
+      doc.setGState(new doc.GState({ opacity: 0.06 }));
+      const wmW = 130, wmH = 130 * (400/600);
+      doc.addImage(LOGO_SRC, 'PNG', (pageW - wmW)/2, (pageH - wmH)/2, wmW, wmH);
+      doc.restoreGraphicsState();
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...MUTED);
+      doc.text('D1N1 . Control de accesos', 15, pageH - 10);
+      doc.text('Pagina ' + pageNumber + ' de ' + pageCount, pageW - 15, pageH - 10, { align: 'right' });
+    }
+
+    doc.addImage(LOGO_SRC, 'PNG', 15, 12, 27, 18);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(...DARK);
+    doc.text('Informe de accesos', 48, 22);
+
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.7);
+    doc.line(15, 34, pageW - 15, 34);
+
+    let y = 42;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...DARK);
+    doc.text('EVENTO:', 15, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(ev.nombre || ''), 42, y);
+    y += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.text('FECHA:', 15, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(ev.fecha || ''), 42, y);
+    y += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.text('RECINTO:', 15, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(ev.recinto || ''), 42, y);
+    y += 7;
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...MUTED);
+    doc.text('Generado ' + fmtDate(report.generatedAt) + (report.generatedBy ? (' por ' + report.generatedBy) : ''), 15, y);
+    y += 5;
+
+    const body = report.folders.map(f=>[f.carpeta, String(f.acceden), String(f.no_acceden), String(f.total)]);
+    const totalRowIndex = body.length;
+    body.push(['TOTAL', String(report.totals.acceden), String(report.totals.no_acceden), String(report.totals.total)]);
+
+    doc.autoTable({
+      startY: y,
+      head: [['Carpeta', 'Acceden', 'No acceden', 'Total invitaciones']],
+      body: body,
+      theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 10, textColor: DARK, lineColor: [220,220,220], lineWidth: 0.2 },
+      headStyles: { fillColor: GOLD, textColor: [30,30,30], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [250,250,248] },
+      margin: { left: 15, right: 15, bottom: 20 },
+      didParseCell: function(data){
+        if(data.section === 'body' && data.row.index === totalRowIndex){
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = GOLD_LIGHT;
+        }
+      }
+    });
+
+    const pageCount = doc.internal.getNumberOfPages();
+    for(let p=1;p<=pageCount;p++){
+      doc.setPage(p);
+      drawWatermarkAndFooter(p, pageCount);
+    }
+
+    const safeName = (ev.nombre || 'evento').replace(/[^a-zA-Z0-9]+/g, '_');
+    doc.save('Informe_' + safeName + '.pdf');
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = 'Descargar informe (PDF)'; }
+  }
+}
+
+function render(){
+  if(screen==='loading') renderLoading();
+  else if(screen==='setup') renderSetup();
+  else if(screen==='login') renderLogin();
+  else if(screen==='dashboard') renderDashboard();
+  else if(screen==='users') renderUsers();
+  else if(screen==='event') renderEvent();
+}
+
+loadLogo().then(init);
+</script>
+</body>
+</html>
