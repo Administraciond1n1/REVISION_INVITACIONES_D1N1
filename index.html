@@ -190,6 +190,7 @@ let zipFileSel = null;
 let showCreateEvent = false;
 let uiError = '';
 let processing = false;
+let csvSaving = false;
 
 function stripAccents(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 function normCode(s){ return stripAccents(s).trim().toUpperCase(); }
@@ -238,10 +239,16 @@ async function loadEvents(){
     const res = await fetch(SUPABASE_URL + '/rest/v1/portal_events?select=*&order=created_at.desc', { headers: SB_HEADERS });
     if(!res.ok) return [];
     const rows = await res.json();
+    let csvIds = new Set();
+    try{
+      const res2 = await fetch(SUPABASE_URL + '/rest/v1/portal_event_codes?select=event_id', { headers: SB_HEADERS });
+      if(res2.ok){ const rows2 = await res2.json(); csvIds = new Set(rows2.map(r=>r.event_id)); }
+    }catch(e){}
     return rows.map(r=>({
       id: r.id, nombre: r.nombre, fecha: r.fecha, recinto: r.recinto,
       createdBy: r.created_by, createdAt: new Date(r.created_at).getTime(),
-      hasReport: r.has_report, lastGenerated: r.last_generated ? new Date(r.last_generated).getTime() : null
+      hasReport: r.has_report, lastGenerated: r.last_generated ? new Date(r.last_generated).getTime() : null,
+      hasCsv: csvIds.has(r.id)
     }));
   }catch(e){ return []; }
 }
@@ -261,6 +268,24 @@ async function markEventReportSaved(id, generatedAtMs){
     method: 'PATCH',
     headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'return=minimal' }),
     body: JSON.stringify({ has_report: true, last_generated: new Date(generatedAtMs).toISOString() })
+  });
+  return res.ok;
+}
+
+async function loadEventCodes(id){
+  try{
+    const res = await fetch(SUPABASE_URL + '/rest/v1/portal_event_codes?event_id=eq.' + encodeURIComponent(id) + '&select=code_status', { headers: SB_HEADERS });
+    if(!res.ok) return null;
+    const rows = await res.json();
+    if(!rows.length) return null;
+    return rows[0].code_status;
+  }catch(e){ return null; }
+}
+async function saveEventCodes(id, codeStatus, uploadedBy){
+  const res = await fetch(SUPABASE_URL + '/rest/v1/portal_event_codes?on_conflict=event_id', {
+    method: 'POST',
+    headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+    body: JSON.stringify([{ event_id: id, code_status: codeStatus, uploaded_by: uploadedBy }])
   });
   return res.ok;
 }
@@ -598,19 +623,38 @@ function reportTableHtml(report){
 function renderEvent(){
   const ev = getCurrentEvent();
   if(!ev){ screen='dashboard'; render(); return; }
+  const isAdmin = currentUser.role === 'admin';
 
-  const uploadSection = `
+  const csvCard = `
     <div class="card">
       <div class="step-head"><div class="step-num">1</div><div class="step-title">Listado de accesos (CSV)</div></div>
-      <p class="step-desc">El archivo exportado del control de accesos, con los codigos y su fecha de entrada.</p>
+      <p class="step-desc">El archivo exportado del control de accesos, con los codigos y su fecha de entrada. Solo el Administrador lo sube.</p>
       <div class="drop">
         <button class="btn" id="btnCsv">Elegir archivo CSV</button>
         <span class="file-status ${csvFileSel?'loaded':''}" id="csvStatus">${csvFileSel ? csvFileSel.name : 'Ningun archivo cargado'}</span>
         <input type="file" id="csvInput" accept=".csv,text/csv">
       </div>
+      <div class="actions" style="margin-top:14px;">
+        <button class="btn primary" id="btnSaveCsv" ${(!csvFileSel || csvSaving) ? 'disabled' : ''}>${csvSaving ? 'Guardando...' : (ev.hasCsv ? 'Reemplazar listado' : 'Guardar listado')}</button>
+      </div>
+      ${ev.hasCsv ? '<p class="empty-note" style="margin-top:10px;"><span class="badge ok"><span class="badge-dot"></span>Listado de accesos cargado</span></p>' : ''}
     </div>
+  `;
+
+  const waitingCard = `
     <div class="card">
-      <div class="step-head"><div class="step-num">2</div><div class="step-title">Invitaciones (ZIP con carpetas)</div></div>
+      <p class="section-title">Esperando el listado de accesos</p>
+      <p class="section-sub">El Administrador todavia no ha cargado el listado de accesos de este evento. En cuanto lo haga, podras subir tus invitaciones para verificarlas.</p>
+    </div>
+  `;
+
+  const csvReadyBadge = `
+    <p class="empty-note" style="margin:0 0 18px;"><span class="badge ok"><span class="badge-dot"></span>Listado de accesos cargado · ya puedes verificar entradas</span></p>
+  `;
+
+  const zipCard = `
+    <div class="card">
+      <div class="step-head"><div class="step-num">${isAdmin?'2':'1'}</div><div class="step-title">Invitaciones (ZIP con carpetas)</div></div>
       <p class="step-desc">El ZIP con una carpeta por cliente y dentro los PDF de las entradas enviadas.</p>
       <div class="drop">
         <button class="btn" id="btnZip">Elegir archivo ZIP</button>
@@ -619,15 +663,22 @@ function renderEvent(){
       </div>
     </div>
     <div class="card">
-      <div class="step-head"><div class="step-num">3</div><div class="step-title">Procesar</div></div>
+      <div class="step-head"><div class="step-num">${isAdmin?'3':'2'}</div><div class="step-title">Procesar</div></div>
       <p class="step-desc">Puede tardar uno o dos minutos segun el numero de invitaciones.</p>
       <div class="process-row">
-        <button class="btn primary" id="btnProcess" ${(!csvFileSel || !zipFileSel || processing) ? 'disabled' : ''}>Procesar entradas</button>
+        <button class="btn primary" id="btnProcess" ${(!zipFileSel || processing) ? 'disabled' : ''}>Procesar entradas</button>
         <div class="progress-wrap" id="progressWrap"><div class="progress-bar" id="progressBar"></div></div>
         <span class="progress-label" id="progressLabel"></span>
       </div>
     </div>
   `;
+
+  let uploadSection = '';
+  if(!ev.hasCsv){
+    uploadSection = isAdmin ? csvCard : waitingCard;
+  } else {
+    uploadSection = (isAdmin ? csvCard : csvReadyBadge) + zipCard;
+  }
 
   const reportSection = currentReport ? `
     ${reportTableHtml(currentReport)}
@@ -655,17 +706,46 @@ function renderEvent(){
   document.getElementById('btnLogout').onclick = ()=>{ currentUser=null; screen='login'; render(); };
   document.getElementById('btnBackDash').onclick = ()=>{ screen='dashboard'; render(); };
 
-  if(!currentReport){
-    document.getElementById('btnCsv').onclick = ()=> document.getElementById('csvInput').click();
+  if(currentReport){
+    document.getElementById('btnDownloadXlsx').onclick = ()=> downloadExcel(ev, currentReport);
+    document.getElementById('btnDownloadPdf').onclick = ()=> downloadPdf(ev, currentReport);
+    document.getElementById('btnReprocess').onclick = ()=>{ currentReport = null; zipFileSel=null; renderEvent(); };
+    return;
+  }
+
+  if(isAdmin){
+    const btnCsv = document.getElementById('btnCsv');
+    if(btnCsv) btnCsv.onclick = ()=> document.getElementById('csvInput').click();
+    const csvInputEl = document.getElementById('csvInput');
+    if(csvInputEl) csvInputEl.onchange = (e)=>{ csvFileSel = e.target.files[0] || null; renderEvent(); };
+    const btnSaveCsv = document.getElementById('btnSaveCsv');
+    if(btnSaveCsv) btnSaveCsv.onclick = handleSaveCsv;
+  }
+
+  if(ev.hasCsv){
     document.getElementById('btnZip').onclick = ()=> document.getElementById('zipInput').click();
-    document.getElementById('csvInput').onchange = (e)=>{ csvFileSel = e.target.files[0] || null; renderEvent(); };
     document.getElementById('zipInput').onchange = (e)=>{ zipFileSel = e.target.files[0] || null; renderEvent(); };
     const btnProcess = document.getElementById('btnProcess');
     if(btnProcess) btnProcess.onclick = handleProcess;
-  } else {
-    document.getElementById('btnDownloadXlsx').onclick = ()=> downloadExcel(ev, currentReport);
-    document.getElementById('btnDownloadPdf').onclick = ()=> downloadPdf(ev, currentReport);
-    document.getElementById('btnReprocess').onclick = ()=>{ currentReport = null; csvFileSel=null; zipFileSel=null; renderEvent(); };
+  }
+}
+
+async function handleSaveCsv(){
+  if(!csvFileSel || csvSaving) return;
+  csvSaving = true;
+  renderEvent();
+  try{
+    const codeStatus = await parseCsvCodes(csvFileSel);
+    const ok = await saveEventCodes(currentEventId, codeStatus, currentUser.username);
+    if(ok){
+      events = await loadEvents();
+      csvFileSel = null;
+    } else {
+      alert('No se pudo guardar el listado. Comprueba tu conexion e intentalo de nuevo.');
+    }
+  } finally {
+    csvSaving = false;
+    renderEvent();
   }
 }
 
@@ -781,11 +861,17 @@ function buildReport(ticketList, unreadable, codeStatus){
 }
 
 async function handleProcess(){
-  if(!csvFileSel || !zipFileSel || processing) return;
+  if(!zipFileSel || processing) return;
   processing = true;
   renderEvent();
   updateProgressBar(0, 'Leyendo listado de accesos...');
-  const codeStatus = await parseCsvCodes(csvFileSel);
+  const codeStatus = await loadEventCodes(currentEventId);
+  if(!codeStatus){
+    alert('No se encontro el listado de accesos guardado para este evento. Pidele al Administrador que lo cargue.');
+    processing = false;
+    renderEvent();
+    return;
+  }
   const knownCodes = new Set(Object.keys(codeStatus));
   updateProgressBar(0, 'Leyendo invitaciones...');
   const { ticketList, unreadable } = await processZipFile(zipFileSel, knownCodes, (i,total,name)=>{
@@ -815,8 +901,10 @@ async function downloadExcel(ev, report){
     const ws = wb.addWorksheet('INVITACIONES');
     ws.columns = [{ width: 26 }, { width: 14 }, { width: 16 }, { width: 22 }];
 
-    const imageId = wb.addImage({ base64: LOGO_SRC, extension: 'png' });
-    ws.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 170, height: 113 } });
+    if(LOGO_SRC){
+      const imageId = wb.addImage({ base64: LOGO_SRC, extension: 'png' });
+      ws.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 170, height: 113 } });
+    }
     for(let i=0;i<6;i++) ws.addRow([]);
 
     let r = ws.addRow(['EVENTO:', ev.nombre || '']);
@@ -849,6 +937,9 @@ async function downloadExcel(ev, report){
     a.download = 'Informe_' + safeName + '.xlsx';
     a.click();
     URL.revokeObjectURL(url);
+  } catch(e){
+    console.error('Error generando Excel', e);
+    alert('No se pudo generar el Excel. Vuelve a intentarlo; si sigue fallando, recarga la pagina (Ctrl+Shift+R) y vuelve a intentarlo.');
   } finally {
     if(btn){ btn.disabled = false; btn.textContent = 'Descargar informe (Excel)'; }
   }
@@ -871,7 +962,7 @@ async function downloadPdf(ev, report){
       doc.saveGraphicsState();
       doc.setGState(new doc.GState({ opacity: 0.06 }));
       const wmW = 130, wmH = 130 * (400/600);
-      doc.addImage(LOGO_SRC, 'PNG', (pageW - wmW)/2, (pageH - wmH)/2, wmW, wmH);
+      if(LOGO_SRC) doc.addImage(LOGO_SRC, 'PNG', (pageW - wmW)/2, (pageH - wmH)/2, wmW, wmH);
       doc.restoreGraphicsState();
 
       doc.setFont('helvetica', 'normal');
@@ -881,7 +972,7 @@ async function downloadPdf(ev, report){
       doc.text('Pagina ' + pageNumber + ' de ' + pageCount, pageW - 15, pageH - 10, { align: 'right' });
     }
 
-    doc.addImage(LOGO_SRC, 'PNG', 15, 12, 27, 18);
+    if(LOGO_SRC) doc.addImage(LOGO_SRC, 'PNG', 15, 12, 27, 18);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
     doc.setTextColor(...DARK);
@@ -944,6 +1035,9 @@ async function downloadPdf(ev, report){
 
     const safeName = (ev.nombre || 'evento').replace(/[^a-zA-Z0-9]+/g, '_');
     doc.save('Informe_' + safeName + '.pdf');
+  } catch(e){
+    console.error('Error generando PDF', e);
+    alert('No se pudo generar el PDF. Vuelve a intentarlo; si sigue fallando, recarga la pagina (Ctrl+Shift+R) y vuelve a intentarlo.');
   } finally {
     if(btn){ btn.disabled = false; btn.textContent = 'Descargar informe (PDF)'; }
   }
