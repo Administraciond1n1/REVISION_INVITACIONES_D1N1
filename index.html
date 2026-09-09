@@ -96,6 +96,7 @@
   .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
   .btn.primary:hover{filter:brightness(1.08);}
   .btn.danger{background:var(--bad-dim);border-color:var(--bad);color:var(--bad);}
+  .btn.small{padding:6px 12px;font-size:12px;}
   .btn:disabled{opacity:.4;cursor:not-allowed;}
   .btn.full{width:100%;}
   .btn.small{padding:6px 12px;font-size:12px;}
@@ -178,6 +179,7 @@ let csvFileSel = null;
 let zipFileSel = null;
 let showCreateEvent = false;
 let uiError = '';
+let eventSearchText = '';
 let processing = false;
 let csvSaving = false;
 
@@ -186,6 +188,31 @@ function normCode(s){ return stripAccents(s).trim().toUpperCase(); }
 function genId(){ return 'ev_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(ts){ if(!ts) return '—'; const d = new Date(ts); return d.toLocaleString('es-ES'); }
+
+function fmtFechaLarga(isoDate){
+  if(!isoDate) return '';
+  const d = new Date(isoDate + 'T00:00:00');
+  if(isNaN(d.getTime())) return '';
+  const s = d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function mesEtiqueta(isoDate){
+  if(!isoDate) return 'Sin fecha';
+  const d = new Date(isoDate + 'T00:00:00');
+  if(isNaN(d.getTime())) return 'Sin fecha';
+  const s = d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function agruparPorMes(lista){
+  const grupos = {};
+  lista.forEach(ev=>{
+    const key = ev.fechaDate || 'zzz-sin-fecha';
+    const mesKey = ev.fechaDate ? ev.fechaDate.slice(0,7) : 'zzz-sin-fecha';
+    if(!grupos[mesKey]) grupos[mesKey] = { label: mesEtiqueta(ev.fechaDate), items: [], sortKey: mesKey };
+    grupos[mesKey].items.push(ev);
+  });
+  return Object.values(grupos).sort((a,b)=> b.sortKey.localeCompare(a.sortKey));
+}
 
 async function sha256Hex(str){
   const enc = new TextEncoder().encode(str);
@@ -234,7 +261,7 @@ async function loadEvents(){
       if(res2.ok){ const rows2 = await res2.json(); csvIds = new Set(rows2.map(r=>r.event_id)); }
     }catch(e){}
     return rows.map(r=>({
-      id: r.id, nombre: r.nombre, fecha: r.fecha, recinto: r.recinto,
+      id: r.id, nombre: r.nombre, fecha: r.fecha, fechaDate: r.fecha_date || null, recinto: r.recinto,
       createdBy: r.created_by, createdAt: new Date(r.created_at).getTime(),
       hasReport: r.has_report, lastGenerated: r.last_generated ? new Date(r.last_generated).getTime() : null,
       hasCsv: csvIds.has(r.id)
@@ -246,9 +273,18 @@ async function createEvent(ev){
     method: 'POST',
     headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'return=minimal' }),
     body: JSON.stringify([{
-      id: ev.id, nombre: ev.nombre, fecha: ev.fecha, recinto: ev.recinto,
+      id: ev.id, nombre: ev.nombre, fecha: ev.fecha, fecha_date: ev.fechaDate || null, recinto: ev.recinto,
       created_by: ev.createdBy, has_report: false
     }])
+  });
+  return res.ok;
+}
+async function deleteEvent(id){
+  // Al borrar el evento, la base de datos borra automaticamente su informe
+  // y su listado de accesos guardado (estan enlazados a este evento).
+  const res = await fetch(SUPABASE_URL + '/rest/v1/portal_events?id=eq.' + encodeURIComponent(id), {
+    method: 'DELETE',
+    headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'return=minimal' })
   });
   return res.ok;
 }
@@ -411,7 +447,7 @@ function renderDashboard(){
       <p class="section-title">Crear evento</p>
       <p class="section-sub">Estos datos apareceran en la cabecera del informe.</p>
       <div class="field"><label class="field-label">Nombre del evento</label><input type="text" id="evNombre"></div>
-      <div class="field"><label class="field-label">Fecha</label><input type="text" id="evFecha" placeholder="SABADO, 25 JULIO DE 2026"></div>
+      <div class="field"><label class="field-label">Fecha</label><input type="date" id="evFechaDate"></div>
       <div class="field"><label class="field-label">Recinto</label><input type="text" id="evRecinto"></div>
       <div class="actions">
         <button class="btn primary" id="btnSaveEvent">Guardar evento</button>
@@ -420,18 +456,43 @@ function renderDashboard(){
       <div class="error-msg" id="evError">${escapeHtml(uiError)}</div>
     </div>` : '';
 
-  const cards = events.length === 0 ? `<p class="empty-note">Todavia no hay eventos creados.</p>` : `
-    <div class="event-grid">
-    ${events.slice().sort((a,b)=>b.createdAt-a.createdAt).map(ev=>`
-      <div class="event-card" data-id="${ev.id}">
-        <div class="ev-name">${escapeHtml(ev.nombre)}</div>
-        <div class="ev-meta">${escapeHtml(ev.fecha || '')}<br>${escapeHtml(ev.recinto || '')}</div>
-        <div style="margin-top:10px;">
-          ${ev.hasReport ? '<span class="badge ok"><span class="badge-dot"></span>Informe generado</span>' : '<span class="badge neutral"><span class="badge-dot"></span>Sin procesar</span>'}
+  const q = eventSearchText.trim().toLowerCase();
+  const filtered = !q ? events.slice() : events.filter(ev=>
+    (ev.nombre||'').toLowerCase().includes(q) ||
+    (ev.recinto||'').toLowerCase().includes(q) ||
+    (ev.fecha||'').toLowerCase().includes(q)
+  );
+
+  const searchBar = `
+    <div class="field" style="max-width:360px;margin-bottom:18px;">
+      <input type="text" id="evSearch" placeholder="Buscar por nombre, recinto o fecha..." value="${escapeHtml(eventSearchText)}">
+    </div>`;
+
+  let cards;
+  if(events.length === 0){
+    cards = `<p class="empty-note">Todavia no hay eventos creados.</p>`;
+  } else if(filtered.length === 0){
+    cards = `<p class="empty-note">Ningun evento coincide con la busqueda.</p>`;
+  } else {
+    const grupos = agruparPorMes(filtered.slice().sort((a,b)=>b.createdAt-a.createdAt));
+    cards = grupos.map(g=>`
+      <div class="month-group">
+        <p class="section-title" style="margin-top:22px;">${escapeHtml(g.label)}</p>
+        <div class="event-grid">
+        ${g.items.map(ev=>`
+          <div class="event-card" data-id="${ev.id}">
+            <div class="ev-name">${escapeHtml(ev.nombre)}</div>
+            <div class="ev-meta">${escapeHtml(ev.fecha || '')}<br>${escapeHtml(ev.recinto || '')}</div>
+            <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              ${ev.hasReport ? '<span class="badge ok"><span class="badge-dot"></span>Informe generado</span>' : '<span class="badge neutral"><span class="badge-dot"></span>Sin procesar</span>'}
+              ${isAdmin ? `<button class="btn danger small btn-delete-event" data-del-id="${ev.id}" data-del-name="${escapeHtml(ev.nombre)}" title="Eliminar evento">Eliminar</button>` : ''}
+            </div>
+          </div>
+        `).join('')}
         </div>
       </div>
-    `).join('')}
-    </div>`;
+    `).join('');
+  }
 
   document.getElementById('app').innerHTML = `
     ${topBarHtml()}
@@ -444,8 +505,16 @@ function renderDashboard(){
       ${isAdmin ? `<button class="btn" id="btnGoUsers">Gestionar usuarios</button>` : ''}
     </div>
     ${createForm}
+    ${events.length > 0 ? searchBar : ''}
     ${cards}
   `;
+
+  const evSearch = document.getElementById('evSearch');
+  if(evSearch){
+    evSearch.focus();
+    evSearch.setSelectionRange(evSearch.value.length, evSearch.value.length);
+    evSearch.oninput = (e)=>{ eventSearchText = e.target.value; renderDashboard(); };
+  }
 
   const logoutBtn = document.getElementById('btnLogout');
   if(logoutBtn) logoutBtn.onclick = ()=>{ currentUser=null; screen='login'; render(); };
@@ -462,10 +531,11 @@ function renderDashboard(){
   const btnSaveEvent = document.getElementById('btnSaveEvent');
   if(btnSaveEvent) btnSaveEvent.onclick = async ()=>{
     const nombre = document.getElementById('evNombre').value.trim();
-    const fecha = document.getElementById('evFecha').value.trim();
+    const fechaDate = document.getElementById('evFechaDate').value;
     const recinto = document.getElementById('evRecinto').value.trim();
     if(!nombre){ uiError = 'Ponle un nombre al evento.'; renderDashboard(); return; }
-    const ev = { id: genId(), nombre, fecha, recinto, createdAt: Date.now(), createdBy: currentUser.username, hasReport:false };
+    const fecha = fechaDate ? fmtFechaLarga(fechaDate) : '';
+    const ev = { id: genId(), nombre, fecha, fechaDate: fechaDate || null, recinto, createdAt: Date.now(), createdBy: currentUser.username, hasReport:false };
     const ok = await createEvent(ev);
     if(!ok){ uiError = 'No se pudo crear el evento. Comprueba tu conexion e intentalo de nuevo.'; renderDashboard(); return; }
     events = await loadEvents();
@@ -475,6 +545,25 @@ function renderDashboard(){
 
   document.querySelectorAll('.event-card').forEach(card=>{
     card.onclick = ()=> openEvent(card.getAttribute('data-id'));
+  });
+
+  document.querySelectorAll('.btn-delete-event').forEach(btn=>{
+    btn.onclick = async (e)=>{
+      e.stopPropagation();
+      const id = btn.getAttribute('data-del-id');
+      const name = btn.getAttribute('data-del-name');
+      const sure = confirm('¿Seguro que quieres eliminar el evento "' + name + '"?\n\nSe borrara tambien su informe y el listado de accesos cargado. Esta accion no se puede deshacer.');
+      if(!sure) return;
+      btn.disabled = true; btn.textContent = 'Eliminando...';
+      const ok = await deleteEvent(id);
+      if(!ok){
+        alert('No se pudo eliminar el evento. Comprueba tu conexion e intentalo de nuevo.');
+        btn.disabled = false; btn.textContent = 'Eliminar';
+        return;
+      }
+      events = await loadEvents();
+      renderDashboard();
+    };
   });
 }
 
@@ -876,6 +965,14 @@ async function processZipFile(file, knownCodes, progressCb){
   return { ticketList, unreadable };
 }
 
+// Los listados de accesos guardados antes de esta actualizacion se guardaron
+// como true/false; los guardados ahora incluyen tambien la fecha de acceso.
+// Esta funcion entiende los dos formatos para que nada deje de funcionar.
+function accessInfo(st){
+  if(st && typeof st === 'object') return { accessed: !!st.accessed, fecha: st.fecha || '' };
+  return { accessed: !!st, fecha: '' };
+}
+
 function buildReport(ticketList, unreadable, codeStatus){
   const folderMap = {};
   function ensure(f){ if(!folderMap[f]) folderMap[f] = { carpeta:f, acceden:0, no_acceden:0, total:0 }; return folderMap[f]; }
@@ -883,10 +980,9 @@ function buildReport(ticketList, unreadable, codeStatus){
   ticketList.forEach(t=>{
     const f = ensure(t.folder);
     f.total++;
-    const st = codeStatus[t.code];
-    const accedio = !!(st && st.accessed);
-    if(accedio) f.acceden++; else f.no_acceden++;
-    details.push({ carpeta: t.folder, codigo: t.code, archivo: t.file, pagina: t.page, accedio, fecha: (st && st.fecha) || '' });
+    const info = accessInfo(codeStatus[t.code]);
+    if(info.accessed) f.acceden++; else f.no_acceden++;
+    details.push({ carpeta: t.folder, codigo: t.code, archivo: t.file, pagina: t.page, accedio: info.accessed, fecha: info.fecha });
   });
   unreadable.forEach(u=>{
     const f = ensure(u.folder);
