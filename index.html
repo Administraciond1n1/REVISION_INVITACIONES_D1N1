@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
@@ -774,9 +775,31 @@ async function parseCsvCodes(file){
     const code = normCode(rawCode.split(/\s+/)[0]);
     const fechaIn = (cells[fechaInIdx]||'').trim();
     const accessed = fechaIn.length > 0;
-    codeStatus[code] = codeStatus[code] || accessed;
+    if(!codeStatus[code] || (accessed && !codeStatus[code].accessed)){
+      codeStatus[code] = { accessed, fecha: accessed ? fechaIn : '' };
+    }
   }
   return codeStatus;
+}
+
+async function tryDecodeQrFromPage(page, knownCodes){
+  if(typeof jsQR !== 'function') return null;
+  const scales = [2, 3];
+  for(const scale of scales){
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const result = jsQR(imgData.data, imgData.width, imgData.height);
+    if(result && result.data){
+      const nc = normCode(result.data);
+      if(knownCodes.has(nc)) return nc;
+    }
+  }
+  return null;
 }
 
 async function processZipFile(file, knownCodes, progressCb){
@@ -800,29 +823,52 @@ async function processZipFile(file, knownCodes, progressCb){
     catch(e){ unreadable.push({folder, file: fileName, page: '(archivo)'}); continue; }
     for(let p=1;p<=pdf.numPages;p++){
       let code = null;
+      let page = null;
       try{
-        const page = await pdf.getPage(p);
+        page = await pdf.getPage(p);
         const content = await page.getTextContent();
         const freq = {};
         content.items.forEach(it=>{
           const s = (it.str||'').trim();
-          if(/^[A-Z0-9]{10,16}$/.test(s)) freq[s] = (freq[s]||0)+1;
+          // Los codigos de entrada varian mucho de un evento a otro (longitud
+          // y simbolos), asi que aqui solo aplicamos un filtro de sentido
+          // comun; la confirmacion real es que el codigo exista en el CSV.
+          if(s.length>=4 && s.length<=40 && !/^\s*$/.test(s)) freq[s] = (freq[s]||0)+1;
         });
         // Un PDF de entrada suele repetir dos codigos (el de la entrada y la
         // referencia de compra). Para no confundirlos, nos quedamos con el
         // candidato que realmente existe en el listado de accesos (CSV).
         let best = null, bestCount = 0;
         Object.keys(freq).forEach(k=>{
-          if(knownCodes.has(k) && freq[k] > bestCount){ best = k; bestCount = freq[k]; }
+          const nk = normCode(k);
+          if(knownCodes.has(nk) && freq[k] > bestCount){ best = nk; bestCount = freq[k]; }
         });
-        if(!best){
-          // ningun candidato coincide con el CSV: nos quedamos con el mas
-          // frecuente como ultimo recurso, para no perder el registro.
-          Object.keys(freq).forEach(k=>{ if(freq[k] > bestCount){ best = k; bestCount = freq[k]; } });
-        }
         code = best;
       }catch(e){ code = null; }
-      if(code) ticketList.push({ folder, code: normCode(code), file: fileName, page: p });
+      if(!code && page){
+        // El PDF no tiene texto reconocible en esta pagina (p.ej. entradas
+        // convertidas a imagen). Como ultimo recurso, renderizamos la pagina
+        // y leemos el codigo QR o de barras si lleva uno.
+        try{ code = await tryDecodeQrFromPage(page, knownCodes); }catch(e){ code = null; }
+      }
+      if(!code){
+        // ultimo recurso: si habia texto pero ninguno coincidia con el CSV,
+        // nos quedamos con el mas frecuente para no perder el registro.
+        try{
+          const content2 = page ? await page.getTextContent() : null;
+          if(content2){
+            const freq2 = {};
+            content2.items.forEach(it=>{
+              const s = (it.str||'').trim();
+              if(s.length>=4 && s.length<=40) freq2[s] = (freq2[s]||0)+1;
+            });
+            let fb=null, fbc=0;
+            Object.keys(freq2).forEach(k=>{ if(freq2[k]>fbc){ fb=k; fbc=freq2[k]; } });
+            if(fb) code = normCode(fb);
+          }
+        }catch(e){}
+      }
+      if(code) ticketList.push({ folder, code, file: fileName, page: p });
       else unreadable.push({ folder, file: fileName, page: p });
     }
     await new Promise(r=>setTimeout(r,0));
@@ -833,19 +879,25 @@ async function processZipFile(file, knownCodes, progressCb){
 function buildReport(ticketList, unreadable, codeStatus){
   const folderMap = {};
   function ensure(f){ if(!folderMap[f]) folderMap[f] = { carpeta:f, acceden:0, no_acceden:0, total:0 }; return folderMap[f]; }
+  const details = [];
   ticketList.forEach(t=>{
     const f = ensure(t.folder);
     f.total++;
-    if(codeStatus[t.code]) f.acceden++; else f.no_acceden++;
+    const st = codeStatus[t.code];
+    const accedio = !!(st && st.accessed);
+    if(accedio) f.acceden++; else f.no_acceden++;
+    details.push({ carpeta: t.folder, codigo: t.code, archivo: t.file, pagina: t.page, accedio, fecha: (st && st.fecha) || '' });
   });
   unreadable.forEach(u=>{
     const f = ensure(u.folder);
     f.total++;
     f.no_acceden++;
+    details.push({ carpeta: u.folder, codigo: '(no identificado)', archivo: u.file, pagina: u.page, accedio: false, fecha: '' });
   });
   const folders = Object.values(folderMap).sort((a,b)=>a.carpeta.localeCompare(b.carpeta,'es'));
   const totals = folders.reduce((acc,f)=>{ acc.acceden+=f.acceden; acc.no_acceden+=f.no_acceden; acc.total+=f.total; return acc; }, {acceden:0,no_acceden:0,total:0});
-  return { folders, totals, unreadable };
+  details.sort((a,b)=> a.carpeta.localeCompare(b.carpeta,'es') || (a.archivo||'').localeCompare(b.archivo||'','es') || (a.pagina-b.pagina));
+  return { folders, totals, unreadable, details };
 }
 
 async function handleProcess(){
@@ -915,6 +967,16 @@ async function downloadExcel(ev, report){
 
     r = ws.addRow(['TOTAL:', report.totals.acceden, report.totals.no_acceden, report.totals.total]);
     r.font = { bold: true };
+
+    if(Array.isArray(report.details) && report.details.length){
+      const wsD = wb.addWorksheet('DETALLE');
+      wsD.columns = [{ width: 26 }, { width: 18 }, { width: 10 }, { width: 12 }, { width: 22 }, { width: 34 }];
+      let rd = wsD.addRow(['CARPETA', 'CODIGO', 'ACCEDE', 'PAGINA', 'FECHA Y HORA DE ACCESO', 'ARCHIVO']);
+      rd.font = { bold: true };
+      report.details.forEach(d=>{
+        wsD.addRow([d.carpeta, d.codigo, d.accedio ? 'SI' : 'NO', d.pagina, d.fecha || '—', d.archivo]);
+      });
+    }
 
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
