@@ -884,6 +884,18 @@ async function parseCsvCodes(file){
   return codeStatus;
 }
 
+// Un unico lienzo (canvas) reutilizado para todo el ZIP. Crear un canvas
+// nuevo por cada intento (con miles de paginas x varias resoluciones cada
+// una) puede agotar el limite de lienzos simultaneos que permite el
+// navegador, provocando que algunas paginas fallen sin motivo aparente.
+let sharedQrCanvas = null;
+function getSharedQrCanvas(){
+  if(!sharedQrCanvas){
+    sharedQrCanvas = document.createElement('canvas');
+  }
+  return sharedQrCanvas;
+}
+
 async function tryDecodeQrFromPage(page, knownCodes){
   if(typeof jsQR !== 'function') return null;
   // Probamos varias resoluciones porque el tamano optimo para leer el QR
@@ -899,11 +911,12 @@ async function tryDecodeQrFromPage(page, knownCodes){
 async function renderAndDecodeQr(page, scale){
   try{
     const viewport = page.getViewport({ scale });
-    const canvas = document.createElement('canvas');
+    const canvas = getSharedQrCanvas();
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     ctx.imageSmoothingEnabled = false; // bordes nitidos: ayuda a leer QR pequenos
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, viewport }).promise;
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const result = jsQR(imgData.data, imgData.width, imgData.height);
