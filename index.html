@@ -726,6 +726,13 @@ function renderEvent(){
     </div>
   `;
 
+  const waitingReportCard = `
+    <div class="card">
+      <p class="section-title">Informe todavia no disponible</p>
+      <p class="section-sub">El Administrador todavia no ha generado el informe de este evento. En cuanto este listo, podras descargarlo aqui en Excel y PDF.</p>
+    </div>
+  `;
+
   const csvReadyBadge = `
     <p class="empty-note" style="margin:0 0 18px;"><span class="badge ok"><span class="badge-dot"></span>Listado de accesos cargado · ya puedes verificar entradas</span></p>
   `;
@@ -752,10 +759,13 @@ function renderEvent(){
   `;
 
   let uploadSection = '';
-  if(!ev.hasCsv){
-    uploadSection = isAdmin ? csvCard : waitingCard;
+  if(!isAdmin){
+    // El rol Usuario es solo de consulta/descarga: no genera ni reprocesa informes.
+    uploadSection = waitingReportCard;
+  } else if(!ev.hasCsv){
+    uploadSection = csvCard;
   } else {
-    uploadSection = (isAdmin ? csvCard : csvReadyBadge) + zipCard;
+    uploadSection = csvCard + zipCard;
   }
 
   const reportSection = currentReport ? `
@@ -763,9 +773,9 @@ function renderEvent(){
     <div class="actions">
       <button class="btn primary" id="btnDownloadXlsx">Descargar informe (Excel)</button>
       <button class="btn primary" id="btnDownloadPdf">Descargar informe (PDF)</button>
-      <button class="btn" id="btnReprocess">Volver a procesar</button>
+      ${isAdmin ? '<button class="btn" id="btnReprocess">Volver a procesar</button>' : ''}
     </div>
-    <p class="empty-note" id="saveStatusNote">Este informe queda guardado. Se mantendra al volver a entrar en el evento, a no ser que lo proceses de nuevo.</p>
+    <p class="empty-note" id="saveStatusNote">${isAdmin ? 'Este informe queda guardado. Se mantendra al volver a entrar en el evento, a no ser que lo proceses de nuevo.' : 'Informe generado por el Administrador.'}</p>
   ` : '';
 
   document.getElementById('app').innerHTML = `
@@ -787,9 +797,12 @@ function renderEvent(){
   if(currentReport){
     document.getElementById('btnDownloadXlsx').onclick = ()=> downloadExcel(ev, currentReport);
     document.getElementById('btnDownloadPdf').onclick = ()=> downloadPdf(ev, currentReport);
-    document.getElementById('btnReprocess').onclick = ()=>{ currentReport = null; zipFileSel=null; renderEvent(); };
+    const btnReprocess = document.getElementById('btnReprocess');
+    if(btnReprocess) btnReprocess.onclick = ()=>{ currentReport = null; zipFileSel=null; renderEvent(); };
     return;
   }
+
+  if(!isAdmin) return; // El Usuario solo consulta/descarga; no hay nada mas que conectar aqui.
 
   if(isAdmin){
     const btnCsv = document.getElementById('btnCsv');
@@ -901,7 +914,6 @@ async function processZipFile(file, knownCodes, progressCb){
   const unreadable = [];
   for(let i=0;i<pdfEntries.length;i++){
     const entry = pdfEntries[i];
-    progressCb(i+1, pdfEntries.length, entry.name);
     const parts = entry.name.split('/').filter(p=>p.length>0);
     const folder = parts.length>=2 ? parts[parts.length-2] : 'SIN CARPETA';
     const fileName = parts[parts.length-1];
@@ -911,6 +923,7 @@ async function processZipFile(file, knownCodes, progressCb){
     try{ pdf = await pdfjsLib.getDocument({data: arrbuf}).promise; }
     catch(e){ unreadable.push({folder, file: fileName, page: '(archivo)'}); continue; }
     for(let p=1;p<=pdf.numPages;p++){
+      progressCb(i+1, pdfEntries.length, fileName + (pdf.numPages>1 ? ' (pagina ' + p + '/' + pdf.numPages + ')' : ''));
       let code = null;
       let page = null;
       try{
@@ -959,8 +972,10 @@ async function processZipFile(file, knownCodes, progressCb){
       }
       if(code) ticketList.push({ folder, code, file: fileName, page: p });
       else unreadable.push({ folder, file: fileName, page: p });
+      // Cedemos el control al navegador tras cada pagina (no solo cada
+      // archivo) para que la pestaña no parezca congelada en PDFs largos.
+      await new Promise(r=>setTimeout(r,0));
     }
-    await new Promise(r=>setTimeout(r,0));
   }
   return { ticketList, unreadable };
 }
