@@ -184,7 +184,14 @@ let processing = false;
 let csvSaving = false;
 
 function stripAccents(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
-function normCode(s){ return stripAccents(s).trim().toUpperCase(); }
+function normCode(s){
+  let v = stripAccents(s).trim().toUpperCase();
+  // Los codigos de barras suelen imprimirse con asteriscos de inicio/fin
+  // (marcadores tipo Code39, p.ej. "*ABZI63VY4*"). No forman parte del
+  // codigo real, asi que los quitamos antes de comparar con el CSV.
+  v = v.replace(/^\*+|\*+$/g, '').trim();
+  return v;
+}
 function genId(){ return 'ev_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(ts){ if(!ts) return '—'; const d = new Date(ts); return d.toLocaleString('es-ES'); }
@@ -898,9 +905,10 @@ function getSharedQrCanvas(){
 
 async function tryDecodeQrFromPage(page, knownCodes){
   if(typeof jsQR !== 'function') return null;
-  // Probamos varias resoluciones porque el tamano optimo para leer el QR
-  // varia segun el diseno de cada entrada.
-  const scales = [1.5, 2, 2.5, 3, 4];
+  // Probamos unas pocas resoluciones (de menor a mayor: la mas pequena ya es
+  // la mas rapida y en la practica acierta casi siempre). Si falla, vamos
+  // probando resoluciones mayores como red de seguridad.
+  const scales = [1.5, 2.5, 4];
   for(const scale of scales){
     const nc = await renderAndDecodeQr(page, scale);
     if(nc && knownCodes.has(nc)) return nc;
@@ -932,6 +940,7 @@ async function processZipFile(file, knownCodes, progressCb){
   });
   const ticketList = [];
   const unreadable = [];
+  let pagesDone = 0;
   const pdfDocsByFolder = {}; // para poder reintentar paginas fallidas al final sin releer el ZIP
 
   async function extractCodeFromPage(pdf, p, knownCodes){
@@ -965,19 +974,10 @@ async function processZipFile(file, knownCodes, progressCb){
       try{ code = await tryDecodeQrFromPage(page, knownCodes); }catch(e){ code = null; }
     }
     if(!code && page){
-      // ultimo recurso: si habia texto pero ninguno coincidia con el CSV,
-      // nos quedamos con el mas frecuente para no perder el registro.
-      try{
-        const content2 = await page.getTextContent();
-        const freq2 = {};
-        content2.items.forEach(it=>{
-          const s = (it.str||'').trim();
-          if(s.length>=4 && s.length<=40) freq2[s] = (freq2[s]||0)+1;
-        });
-        let fb=null, fbc=0;
-        Object.keys(freq2).forEach(k=>{ if(freq2[k]>fbc){ fb=k; fbc=freq2[k]; } });
-        if(fb) code = normCode(fb);
-      }catch(e){}
+      // Si ni el texto ni el QR han dado con un codigo que exista en el CSV,
+      // NO inventamos nada: es preferible marcarla como "no identificada"
+      // (y que se revise a mano) a asignarle un codigo falso que contaria
+      // como "no accede" sin que se note el error.
     }
     return code;
   }
@@ -994,7 +994,8 @@ async function processZipFile(file, knownCodes, progressCb){
     catch(e){ unreadable.push({folder, file: fileName, page: '(archivo)'}); continue; }
     pdfDocsByFolder[folder + '\u0000' + fileName] = pdf;
     for(let p=1;p<=pdf.numPages;p++){
-      progressCb(i+1, pdfEntries.length, fileName + (pdf.numPages>1 ? ' (pagina ' + p + '/' + pdf.numPages + ')' : ''));
+      pagesDone++;
+      progressCb(i+1, pdfEntries.length, fileName + (pdf.numPages>1 ? ' (pagina ' + p + '/' + pdf.numPages + ')' : ''), pagesDone);
       const code = await extractCodeFromPage(pdf, p, knownCodes);
       if(code) ticketList.push({ folder, code, file: fileName, page: p });
       else unreadable.push({ folder, file: fileName, page: p });
@@ -1013,7 +1014,7 @@ async function processZipFile(file, knownCodes, progressCb){
     await new Promise(r=>setTimeout(r, 300));
     for(let j=0;j<retryable.length;j++){
       const u = retryable[j];
-      progressCb(pdfEntries.length, pdfEntries.length, 'Reintentando ' + u.file + ' (pagina ' + u.page + ')...');
+      progressCb(pdfEntries.length, pdfEntries.length, 'Reintentando ' + u.file + ' (pagina ' + u.page + ')...', pagesDone);
       const pdf = pdfDocsByFolder[u.folder + '\u0000' + u.file];
       if(!pdf) continue;
       const code = await extractCodeFromPage(pdf, u.page, knownCodes);
@@ -1074,8 +1075,10 @@ async function handleProcess(){
   }
   const knownCodes = new Set(Object.keys(codeStatus));
   updateProgressBar(0, 'Leyendo invitaciones...');
-  const { ticketList, unreadable } = await processZipFile(zipFileSel, knownCodes, (i,total,name)=>{
-    updateProgressBar(i/total, 'Leyendo PDF ' + i + ' de ' + total + ': ' + name);
+  const startTime = Date.now();
+  const { ticketList, unreadable } = await processZipFile(zipFileSel, knownCodes, (i,total,name,pagesDone)=>{
+    const secs = Math.round((Date.now()-startTime)/1000);
+    updateProgressBar(i/total, 'Leyendo PDF ' + i + ' de ' + total + ': ' + name + ' · ' + pagesDone + ' paginas leidas · ' + secs + 's');
   });
   const report = buildReport(ticketList, unreadable, codeStatus);
   report.generatedAt = Date.now();
