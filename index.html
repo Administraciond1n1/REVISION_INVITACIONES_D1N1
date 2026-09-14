@@ -941,7 +941,6 @@ async function processZipFile(file, knownCodes, progressCb){
   const ticketList = [];
   const unreadable = [];
   let pagesDone = 0;
-  const pdfDocsByFolder = {}; // para poder reintentar paginas fallidas al final sin releer el ZIP
 
   async function extractCodeFromPage(pdf, p, knownCodes){
     let code = null;
@@ -979,6 +978,7 @@ async function processZipFile(file, knownCodes, progressCb){
       // (y que se revise a mano) a asignarle un codigo falso que contaria
       // como "no accede" sin que se note el error.
     }
+    if(page){ try{ page.cleanup && page.cleanup(); }catch(e){} }
     return code;
   }
 
@@ -992,39 +992,38 @@ async function processZipFile(file, knownCodes, progressCb){
     let pdf;
     try{ pdf = await pdfjsLib.getDocument({data: arrbuf}).promise; }
     catch(e){ unreadable.push({folder, file: fileName, page: '(archivo)'}); continue; }
-    pdfDocsByFolder[folder + '\u0000' + fileName] = pdf;
+    const pageResults = []; // {p, code}
     for(let p=1;p<=pdf.numPages;p++){
       pagesDone++;
       progressCb(i+1, pdfEntries.length, fileName + (pdf.numPages>1 ? ' (pagina ' + p + '/' + pdf.numPages + ')' : ''), pagesDone);
       const code = await extractCodeFromPage(pdf, p, knownCodes);
-      if(code) ticketList.push({ folder, code, file: fileName, page: p });
-      else unreadable.push({ folder, file: fileName, page: p });
+      pageResults.push({ p, code });
       // Cedemos el control al navegador tras cada pagina (no solo cada
       // archivo) para que la pestaña no parezca congelada en PDFs largos.
       await new Promise(r=>setTimeout(r,0));
     }
-  }
-
-  // Segunda pasada: algunas paginas pueden fallar la primera vez por una
-  // simple sobrecarga puntual del navegador (no por un problema real del
-  // PDF). Antes de darlas por perdidas, les damos un respiro y una segunda
-  // oportunidad completa.
-  const retryable = unreadable.filter(u => u.page !== '(archivo)');
-  if(retryable.length){
-    await new Promise(r=>setTimeout(r, 300));
-    for(let j=0;j<retryable.length;j++){
-      const u = retryable[j];
-      progressCb(pdfEntries.length, pdfEntries.length, 'Reintentando ' + u.file + ' (pagina ' + u.page + ')...', pagesDone);
-      const pdf = pdfDocsByFolder[u.folder + '\u0000' + u.file];
-      if(!pdf) continue;
-      const code = await extractCodeFromPage(pdf, u.page, knownCodes);
-      if(code){
-        ticketList.push({ folder: u.folder, code, file: u.file, page: u.page });
-        const idx = unreadable.indexOf(u);
-        if(idx !== -1) unreadable.splice(idx, 1);
+    // Antes de cerrar este PDF, reintentamos aqui mismo cualquier pagina que
+    // haya fallado. Algunas fallan por una simple sobrecarga puntual del
+    // navegador, no por un problema real del PDF.
+    const failedHere = pageResults.filter(r=>!r.code);
+    if(failedHere.length){
+      await new Promise(r=>setTimeout(r, 150));
+      for(const fr of failedHere){
+        progressCb(i+1, pdfEntries.length, fileName + ' (reintentando pagina ' + fr.p + ')', pagesDone);
+        const code2 = await extractCodeFromPage(pdf, fr.p, knownCodes);
+        if(code2) fr.code = code2;
+        await new Promise(r=>setTimeout(r,0));
       }
-      await new Promise(r=>setTimeout(r,0));
     }
+    pageResults.forEach(r=>{
+      if(r.code) ticketList.push({ folder, code: r.code, file: fileName, page: r.p });
+      else unreadable.push({ folder, file: fileName, page: r.p });
+    });
+    // Liberamos este PDF antes de pasar al siguiente. Mantener muchos
+    // documentos abiertos a la vez en el navegador (en vez de cerrarlos al
+    // terminar cada uno) puede agotar sus recursos internos en ZIPs con
+    // muchos archivos, y hacer fallar paginas sin motivo real.
+    try{ pdf.destroy && pdf.destroy(); }catch(e){}
   }
 
   return { ticketList, unreadable };
