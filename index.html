@@ -155,14 +155,28 @@
   .link-btn:hover{text-decoration:underline;}
   .nav-tabs{display:flex;gap:8px;margin-bottom:24px;}
   ::-webkit-scrollbar{height:6px;width:6px;}
-  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}  .app-footer{
+    max-width:900px;margin:32px auto 20px;padding:14px 20px 0;
+    border-top:1px solid var(--border);
+    font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);
+    text-align:center;letter-spacing:.02em;
+  }
 </style>
 </head>
 <body>
 <div id="canvasHolder"><canvas id="workCanvas"></canvas></div>
 <div class="wrap" id="app"></div>
+<div class="app-footer" id="appFooter"></div>
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+// --- Version del programa -------------------------------------------------
+// Estos son los DOS UNICOS valores que hay que tocar en cada actualizacion.
+// Se muestran automaticamente en el pie de todas las pantallas de la web.
+const APP_VERSION = "1.0";
+const APP_UPDATED = "16/09/2026 12:10h";
+document.getElementById('appFooter').textContent = 'WebEntradas ' + APP_VERSION + ' \u00b7 \u00daltima actualizaci\u00f3n: ' + APP_UPDATED;
+
 
 const SUPABASE_URL = "https://dzbletsfoassdcnszuqj.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6YmxldHNmb2Fzc2RjbnN6dXFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwODkyNjUsImV4cCI6MjEwMTY2NTI2NX0.RQa_DLKUBy9UgNAf8mjA_nVdaEqDn993yoqmOx-L8I8";
