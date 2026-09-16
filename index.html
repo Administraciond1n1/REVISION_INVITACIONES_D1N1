@@ -942,19 +942,48 @@ async function processZipFile(file, knownCodes, progressCb){
   const unreadable = [];
   let pagesDone = 0;
 
+  function collectTextCandidates(items){
+    // Ademas de cada fragmento de texto suelto, reconstruimos tambien la
+    // "linea" completa agrupando por su posicion vertical: algunos
+    // visores de PDF (sobre todo en navegador) parten un codigo con
+    // espacio en medio (p.ej. "EJ4 QRGN8") en dos fragmentos separados
+    // ("EJ4" y "QRGN8"), y si solo miramos cada fragmento por separado
+    // nunca encontramos el codigo completo.
+    const candidates = [];
+    const lines = {};
+    items.forEach(it=>{
+      const s = (it.str||'').trim();
+      if(s) candidates.push(s);
+      const y = (it.transform && typeof it.transform[5]==='number') ? Math.round(it.transform[5]*2)/2 : null;
+      if(y === null) return;
+      const key = y.toFixed(1);
+      if(!lines[key]) lines[key] = [];
+      lines[key].push(it);
+    });
+    Object.values(lines).forEach(lineItems=>{
+      if(lineItems.length < 2) return;
+      lineItems.sort((a,b)=> (a.transform ? a.transform[4] : 0) - (b.transform ? b.transform[4] : 0));
+      const noSpace = lineItems.map(it=>it.str||'').join('').trim();
+      const withSpace = lineItems.map(it=>it.str||'').join(' ').replace(/\s+/g,' ').trim();
+      if(noSpace) candidates.push(noSpace);
+      if(withSpace && withSpace !== noSpace) candidates.push(withSpace);
+    });
+    return candidates;
+  }
+
   async function extractCodeFromPage(pdf, p, knownCodes){
     let code = null;
     let page = null;
     try{
       page = await pdf.getPage(p);
       const content = await page.getTextContent();
+      const candidates = collectTextCandidates(content.items);
       const freq = {};
-      content.items.forEach(it=>{
-        const s = (it.str||'').trim();
+      candidates.forEach(s=>{
         // Los codigos de entrada varian mucho de un evento a otro (longitud
         // y simbolos), asi que aqui solo aplicamos un filtro de sentido
         // comun; la confirmacion real es que el codigo exista en el CSV.
-        if(s.length>=4 && s.length<=40 && !/^\s*$/.test(s)) freq[s] = (freq[s]||0)+1;
+        if(s.length>=4 && s.length<=40) freq[s] = (freq[s]||0)+1;
       });
       // Un PDF de entrada suele repetir dos codigos (el de la entrada y la
       // referencia de compra). Para no confundirlos, nos quedamos con el
