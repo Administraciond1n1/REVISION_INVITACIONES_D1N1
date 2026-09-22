@@ -1,13 +1,1313 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Control de Aforo</title>
-    <script type="module" crossorigin src="/assets/index-DqyEPgfA.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-HozMtH25.css">
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>D1N1 — Control de Accesos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root{
+    --bg:#0F1113;
+    --surface:#1B1E22;
+    --surface-2:#24282D;
+    --border:#33383F;
+    --text:#F4F2EC;
+    --muted:#9BA0A8;
+    --ok:#34D399;
+    --ok-dim:#0F2A22;
+    --bad:#F2685A;
+    --bad-dim:#301613;
+    --warn:#F5B942;
+    --warn-dim:#2E2410;
+    --accent:#6E7BFF;
+    --accent-dim:#1B1E3A;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    padding:0 20px 80px;
+  }
+  .wrap{max-width:900px;margin:0 auto;}
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:22px 0;border-bottom:1px solid var(--border);margin-bottom:8px;
+    flex-wrap:wrap;gap:14px;
+  }
+  .brand{display:flex;align-items:center;gap:14px;}
+  .brand img{height:40px;width:auto;display:block;}
+  .brand-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;}
+  .who{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted);}
+  .who .role-badge{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+    padding:3px 9px;border-radius:20px;background:var(--accent-dim);color:var(--accent);
+  }
+  header.hero{padding:40px 0 30px;}
+  h1{
+    font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:34px;
+    line-height:1.1;margin:0 0 12px;letter-spacing:-.01em;
+  }
+  header.hero p{color:var(--muted);font-size:15px;line-height:1.6;max-width:560px;margin:0;}
+  .card{
+    background:var(--surface);border:1px solid var(--border);border-radius:16px;
+    padding:28px 30px;margin-bottom:22px;
+  }
+  .card.narrow{max-width:420px;margin-left:auto;margin-right:auto;}
+  .step-head{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
+  .step-num{
+    font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:13px;color:var(--bg);
+    background:var(--accent);width:26px;height:26px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .step-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;}
+  .step-desc{color:var(--muted);font-size:14px;line-height:1.6;margin:6px 0 20px 38px;}
+  .drop{
+    margin-left:38px;border:1.5px dashed var(--border);border-radius:12px;padding:22px;
+    display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  }
+  label.field-label{
+    display:block;font-size:12px;color:var(--muted);text-transform:uppercase;
+    letter-spacing:.05em;margin:0 0 6px;font-family:'JetBrains Mono',monospace;
+  }
+  input[type=text],input[type=password],input[type=date],select{
+    width:100%;background:var(--surface-2);border:1px solid var(--border);
+    color:var(--text);border-radius:9px;padding:11px 13px;font-size:14px;
+    font-family:'Inter',sans-serif;
+  }
+  input:focus,select:focus{outline:none;border-color:var(--accent);}
+  .field{margin-bottom:16px;}
+  .btn{
+    font-family:'Inter',sans-serif;font-weight:600;font-size:14px;color:var(--text);
+    background:var(--surface-2);border:1px solid var(--border);border-radius:9px;
+    padding:10px 18px;cursor:pointer;transition:background .15s, border-color .15s;
+  }
+  .btn:hover{background:#2C3138;border-color:#454B54;}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .btn.primary:hover{filter:brightness(1.08);}
+  .btn.danger{background:var(--bad-dim);border-color:var(--bad);color:var(--bad);}
+  .btn.small{padding:6px 12px;font-size:12px;}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn.full{width:100%;}
+  .btn.small{padding:6px 12px;font-size:12px;}
+  input[type=file]{display:none;}
+  .file-status{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--muted);}
+  .file-status.loaded{color:var(--ok);}
+  .process-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-top:8px;}
+  .progress-wrap{flex:1;min-width:200px;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;display:none;}
+  .progress-wrap.active{display:block;}
+  .progress-bar{height:100%;width:0%;background:var(--accent);transition:width .15s;}
+  .progress-label{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:22px;}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;}
+  .stat-num{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;line-height:1;}
+  .stat-label{font-size:12px;color:var(--muted);margin-top:8px;text-transform:uppercase;letter-spacing:.06em;}
+  .stat.ok .stat-num{color:var(--ok);}
+  .stat.bad .stat-num{color:var(--bad);}
+  .stat.warn .stat-num{color:var(--warn);}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th{
+    text-align:left;font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--border);
+  }
+  td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  tr.total-row td{font-weight:700;border-top:2px solid var(--border);}
+  .code-cell{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--muted);}
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;}
+  .badge.ok{background:var(--ok-dim);color:var(--ok);}
+  .badge.bad{background:var(--bad-dim);color:var(--bad);}
+  .badge.warn{background:var(--warn-dim);color:var(--warn);}
+  .badge.neutral{background:var(--surface-2);color:var(--muted);}
+  .badge-dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+  .section-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;margin:0 0 4px;}
+  .section-sub{color:var(--muted);font-size:13px;margin:0 0 18px;}
+  .empty-note{color:var(--muted);font-size:13px;padding:12px 0;}
+  .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:22px;}
+  .hidden{display:none;}
+  #canvasHolder{display:none;}
+  .table-wrap{overflow-x:auto;}
+  .help{
+    background:var(--surface-2);border-radius:10px;padding:14px 16px;font-size:13px;
+    color:var(--muted);line-height:1.6;margin:14px 0 0 38px;
+  }
+  .help code{font-family:'JetBrains Mono',monospace;background:var(--bg);padding:1px 6px;border-radius:4px;color:var(--text);}
+  .event-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;}
+  .event-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;
+    cursor:pointer;transition:border-color .15s, transform .1s;
+  }
+  .event-card:hover{border-color:var(--accent);}
+  .event-card .ev-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;margin-bottom:6px;}
+  .event-card .ev-meta{font-size:12px;color:var(--muted);line-height:1.6;}
+  .error-msg{color:var(--bad);font-size:13px;margin-top:8px;}
+  .link-btn{background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;padding:0;font-family:'Inter',sans-serif;}
+  .link-btn:hover{text-decoration:underline;}
+  .nav-tabs{display:flex;gap:8px;margin-bottom:24px;}
+  ::-webkit-scrollbar{height:6px;width:6px;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}  .app-footer{
+    max-width:900px;margin:32px auto 20px;padding:14px 20px 0;
+    border-top:1px solid var(--border);
+    font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);
+    text-align:center;letter-spacing:.02em;
+  }
+</style>
+</head>
+<body>
+<div id="canvasHolder"><canvas id="workCanvas"></canvas></div>
+<div class="wrap" id="app"></div>
+<div class="app-footer" id="appFooter"></div>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+// --- Version del programa -------------------------------------------------
+// Estos son los DOS UNICOS valores que hay que tocar en cada actualizacion.
+// Se muestran automaticamente en el pie de todas las pantallas de la web.
+const APP_VERSION = "1.0";
+const APP_UPDATED = "16/09/2026 12:10h";
+document.getElementById('appFooter').textContent = 'WebEntradas ' + APP_VERSION + ' \u00b7 \u00daltima actualizaci\u00f3n: ' + APP_UPDATED;
+
+
+const SUPABASE_URL = "https://dzbletsfoassdcnszuqj.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6YmxldHNmb2Fzc2RjbnN6dXFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwODkyNjUsImV4cCI6MjEwMTY2NTI2NX0.RQa_DLKUBy9UgNAf8mjA_nVdaEqDn993yoqmOx-L8I8";
+const LOGO_SRC = "data:image/png;base64,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";
+async function loadLogo(){ /* logo is embedded inline, nothing to fetch */ }
+
+let users = [];
+let events = [];
+let currentUser = null;
+let screen = 'loading';
+let currentEventId = null;
+let currentReport = null;
+let csvFileSel = null;
+let zipFileSel = null;
+let showCreateEvent = false;
+let uiError = '';
+let eventSearchText = '';
+let processing = false;
+let csvSaving = false;
+
+function stripAccents(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function normCode(s){
+  let v = stripAccents(s).trim().toUpperCase();
+  // Los codigos de barras suelen imprimirse con asteriscos de inicio/fin
+  // (marcadores tipo Code39, p.ej. "*ABZI63VY4*"). No forman parte del
+  // codigo real, asi que los quitamos antes de comparar con el CSV.
+  v = v.replace(/^\*+|\*+$/g, '').trim();
+  return v;
+}
+function genId(){ return 'ev_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(ts){ if(!ts) return '—'; const d = new Date(ts); return d.toLocaleString('es-ES'); }
+
+function fmtFechaLarga(isoDate){
+  if(!isoDate) return '';
+  const d = new Date(isoDate + 'T00:00:00');
+  if(isNaN(d.getTime())) return '';
+  const s = d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function mesEtiqueta(isoDate){
+  if(!isoDate) return 'Sin fecha';
+  const d = new Date(isoDate + 'T00:00:00');
+  if(isNaN(d.getTime())) return 'Sin fecha';
+  const s = d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function agruparPorMes(lista){
+  const grupos = {};
+  lista.forEach(ev=>{
+    const key = ev.fechaDate || 'zzz-sin-fecha';
+    const mesKey = ev.fechaDate ? ev.fechaDate.slice(0,7) : 'zzz-sin-fecha';
+    if(!grupos[mesKey]) grupos[mesKey] = { label: mesEtiqueta(ev.fechaDate), items: [], sortKey: mesKey };
+    grupos[mesKey].items.push(ev);
+  });
+  return Object.values(grupos).sort((a,b)=> b.sortKey.localeCompare(a.sortKey));
+}
+
+async function sha256Hex(str){
+  const enc = new TextEncoder().encode(str);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+const SB_HEADERS = {
+  'apikey': SUPABASE_ANON_KEY,
+  'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+  'Content-Type': 'application/json'
+};
+
+async function loadUsers(){
+  try{
+    const res = await fetch(SUPABASE_URL + '/rest/v1/portal_users?select=username,pass_hash,role&order=created_at.asc', { headers: SB_HEADERS });
+    if(!res.ok) return null;
+    const rows = await res.json();
+    return rows.map(r=>({ username: r.username, passHash: r.pass_hash, role: r.role }));
+  }catch(e){ return null; }
+}
+async function createUser(username, passHash, role){
+  const res = await fetch(SUPABASE_URL + '/rest/v1/portal_users', {
+    method: 'POST',
+    headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'return=minimal' }),
+    body: JSON.stringify([{ username, pass_hash: passHash, role }])
+  });
+  return res.ok;
+}
+async function deleteUser(username){
+  const res = await fetch(SUPABASE_URL + '/rest/v1/portal_users?username=eq.' + encodeURIComponent(username), {
+    method: 'DELETE',
+    headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'return=minimal' })
+  });
+  return res.ok;
+}
+
+async function loadEvents(){
+  try{
+    const res = await fetch(SUPABASE_URL + '/rest/v1/portal_events?select=*&order=created_at.desc', { headers: SB_HEADERS });
+    if(!res.ok) return [];
+    const rows = await res.json();
+    let csvIds = new Set();
+    try{
+      const res2 = await fetch(SUPABASE_URL + '/rest/v1/portal_event_codes?select=event_id', { headers: SB_HEADERS });
+      if(res2.ok){ const rows2 = await res2.json(); csvIds = new Set(rows2.map(r=>r.event_id)); }
+    }catch(e){}
+    return rows.map(r=>({
+      id: r.id, nombre: r.nombre, fecha: r.fecha, fechaDate: r.fecha_date || null, recinto: r.recinto,
+      createdBy: r.created_by, createdAt: new Date(r.created_at).getTime(),
+      hasReport: r.has_report, lastGenerated: r.last_generated ? new Date(r.last_generated).getTime() : null,
+      hasCsv: csvIds.has(r.id)
+    }));
+  }catch(e){ return []; }
+}
+async function createEvent(ev){
+  const res = await fetch(SUPABASE_URL + '/rest/v1/portal_events', {
+    method: 'POST',
+    headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'return=minimal' }),
+    body: JSON.stringify([{
+      id: ev.id, nombre: ev.nombre, fecha: ev.fecha, fecha_date: ev.fechaDate || null, recinto: ev.recinto,
+      created_by: ev.createdBy, has_report: false
+    }])
+  });
+  return res.ok;
+}
+async function deleteEvent(id){
+  // Al borrar el evento, la base de datos borra automaticamente su informe
+  // y su listado de accesos guardado (estan enlazados a este evento).
+  const res = await fetch(SUPABASE_URL + '/rest/v1/portal_events?id=eq.' + encodeURIComponent(id), {
+    method: 'DELETE',
+    headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'return=minimal' })
+  });
+  return res.ok;
+}
+async function markEventReportSaved(id, generatedAtMs){
+  const res = await fetch(SUPABASE_URL + '/rest/v1/portal_events?id=eq.' + encodeURIComponent(id), {
+    method: 'PATCH',
+    headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'return=minimal' }),
+    body: JSON.stringify({ has_report: true, last_generated: new Date(generatedAtMs).toISOString() })
+  });
+  return res.ok;
+}
+
+async function loadEventCodes(id){
+  try{
+    const res = await fetch(SUPABASE_URL + '/rest/v1/portal_event_codes?event_id=eq.' + encodeURIComponent(id) + '&select=code_status', { headers: SB_HEADERS });
+    if(!res.ok) return null;
+    const rows = await res.json();
+    if(!rows.length) return null;
+    return rows[0].code_status;
+  }catch(e){ return null; }
+}
+async function saveEventCodes(id, codeStatus, uploadedBy){
+  const res = await fetch(SUPABASE_URL + '/rest/v1/portal_event_codes?on_conflict=event_id', {
+    method: 'POST',
+    headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+    body: JSON.stringify([{ event_id: id, code_status: codeStatus, uploaded_by: uploadedBy }])
+  });
+  return res.ok;
+}
+
+async function loadReport(id){
+  try{
+    const res = await fetch(SUPABASE_URL + '/rest/v1/portal_event_reports?event_id=eq.' + encodeURIComponent(id) + '&select=data', { headers: SB_HEADERS });
+    if(!res.ok) return null;
+    const rows = await res.json();
+    if(!rows.length) return null;
+    return rows[0].data;
+  }catch(e){ return null; }
+}
+async function saveReport(id, obj){
+  try{
+    await fetch(SUPABASE_URL + '/rest/v1/portal_event_reports?on_conflict=event_id', {
+      method: 'POST',
+      headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify([{
+        event_id: id, data: obj,
+        generated_at: obj.generatedAt ? new Date(obj.generatedAt).toISOString() : null,
+        generated_by: obj.generatedBy || null
+      }])
+    });
+  }catch(e){ console.error('supabase error', e); }
+}
+
+async function init(){
+  screen = 'loading'; render();
+  const u = await loadUsers();
+  if(!u || u.length===0){ users = []; screen = 'setup'; render(); return; }
+  users = u;
+  screen = 'login'; render();
+}
+
+function topBarHtml(){
+  return `
+  <div class="topbar">
+    <div class="brand">
+      <img src="${LOGO_SRC}" alt="D1N1">
+      <span class="brand-name">Control de accesos</span>
+    </div>
+    <div class="who">
+      <span>${escapeHtml(currentUser.username)}</span>
+      <span class="role-badge">${currentUser.role === 'admin' ? 'Administrador' : 'Usuario'}</span>
+      <button class="btn small" id="btnLogout">Cerrar sesion</button>
+    </div>
+  </div>`;
+}
+
+function renderLoading(){
+  document.getElementById('app').innerHTML = `<div style="padding:80px 0;text-align:center;color:var(--muted);">Cargando...</div>`;
+}
+
+function renderSetup(){
+  document.getElementById('app').innerHTML = `
+  <header class="hero" style="text-align:center;">
+    <div style="display:flex;justify-content:center;margin-bottom:18px;"><img src="${LOGO_SRC}" alt="D1N1" style="height:52px;"></div>
+    <h1>Configura tu cuenta de Administrador</h1>
+    <p style="margin:0 auto;">No hay ninguna cuenta guardada todavia en este portal. Crea la cuenta de Administrador con la que gestionaras eventos y usuarios. Esta pantalla desaparecera en cuanto la crees, y no volvera a aparecer mientras exista al menos una cuenta.</p>
+  </header>
+  <div class="card narrow">
+    <div class="field">
+      <label class="field-label">Usuario</label>
+      <input type="text" id="setupUser" autocomplete="off">
+    </div>
+    <div class="field">
+      <label class="field-label">Contrasena</label>
+      <input type="password" id="setupPass">
+    </div>
+    <div class="field">
+      <label class="field-label">Repite la contrasena</label>
+      <input type="password" id="setupPass2">
+    </div>
+    <button class="btn primary full" id="btnSetup">Crear cuenta de Administrador</button>
+    <div class="error-msg" id="setupError">${escapeHtml(uiError)}</div>
+  </div>`;
+  document.getElementById('btnSetup').onclick = async ()=>{
+    const u = document.getElementById('setupUser').value.trim();
+    const p = document.getElementById('setupPass').value;
+    const p2 = document.getElementById('setupPass2').value;
+    if(!u || !p){ uiError = 'Rellena usuario y contrasena.'; renderSetup(); return; }
+    if(p !== p2){ uiError = 'Las contrasenas no coinciden.'; renderSetup(); return; }
+    const passHash = await sha256Hex(p);
+    const ok = await createUser(u, passHash, 'admin');
+    if(!ok){ uiError = 'No se pudo crear la cuenta. Comprueba tu conexion e intentalo de nuevo.'; renderSetup(); return; }
+    users = await loadUsers();
+    currentUser = { username: u, role: 'admin' };
+    events = await loadEvents();
+    uiError = '';
+    screen = 'dashboard'; render();
+  };
+}
+
+function renderLogin(){
+  document.getElementById('app').innerHTML = `
+  <header class="hero" style="text-align:center;">
+    <div style="display:flex;justify-content:center;margin-bottom:18px;"><img src="${LOGO_SRC}" alt="D1N1" style="height:52px;"></div>
+    <h1>Control de accesos</h1>
+    <p style="margin:0 auto;">Inicia sesion para gestionar eventos e informes de accesos.</p>
+  </header>
+  <div class="card narrow">
+    <div class="field">
+      <label class="field-label">Usuario</label>
+      <input type="text" id="loginUser" autocomplete="username">
+    </div>
+    <div class="field">
+      <label class="field-label">Contrasena</label>
+      <input type="password" id="loginPass" autocomplete="current-password">
+    </div>
+    <button class="btn primary full" id="btnLogin">Entrar</button>
+    <div class="error-msg" id="loginError">${escapeHtml(uiError)}</div>
+  </div>`;
+  const doLogin = async ()=>{
+    const u = document.getElementById('loginUser').value.trim();
+    const p = document.getElementById('loginPass').value;
+    const found = users.find(x=>x.username.toLowerCase() === u.toLowerCase());
+    if(!found){ uiError = 'Usuario o contrasena incorrectos.'; renderLogin(); return; }
+    const hash = await sha256Hex(p);
+    if(hash !== found.passHash){ uiError = 'Usuario o contrasena incorrectos.'; renderLogin(); return; }
+    currentUser = { username: found.username, role: found.role };
+    events = await loadEvents();
+    uiError = '';
+    screen = 'dashboard'; render();
+  };
+  document.getElementById('btnLogin').onclick = doLogin;
+  document.getElementById('loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+}
+
+function renderDashboard(){
+  const isAdmin = currentUser.role === 'admin';
+  const createForm = showCreateEvent ? `
+    <div class="card">
+      <p class="section-title">Crear evento</p>
+      <p class="section-sub">Estos datos apareceran en la cabecera del informe.</p>
+      <div class="field"><label class="field-label">Nombre del evento</label><input type="text" id="evNombre"></div>
+      <div class="field"><label class="field-label">Fecha</label><input type="date" id="evFechaDate"></div>
+      <div class="field"><label class="field-label">Recinto</label><input type="text" id="evRecinto"></div>
+      <div class="actions">
+        <button class="btn primary" id="btnSaveEvent">Guardar evento</button>
+        <button class="btn" id="btnCancelEvent">Cancelar</button>
+      </div>
+      <div class="error-msg" id="evError">${escapeHtml(uiError)}</div>
+    </div>` : '';
+
+  const q = eventSearchText.trim().toLowerCase();
+  const filtered = !q ? events.slice() : events.filter(ev=>
+    (ev.nombre||'').toLowerCase().includes(q) ||
+    (ev.recinto||'').toLowerCase().includes(q) ||
+    (ev.fecha||'').toLowerCase().includes(q)
+  );
+
+  const searchBar = `
+    <div class="field" style="max-width:360px;margin-bottom:18px;">
+      <input type="text" id="evSearch" placeholder="Buscar por nombre, recinto o fecha..." value="${escapeHtml(eventSearchText)}">
+    </div>`;
+
+  let cards;
+  if(events.length === 0){
+    cards = `<p class="empty-note">Todavia no hay eventos creados.</p>`;
+  } else if(filtered.length === 0){
+    cards = `<p class="empty-note">Ningun evento coincide con la busqueda.</p>`;
+  } else {
+    const grupos = agruparPorMes(filtered.slice().sort((a,b)=>b.createdAt-a.createdAt));
+    cards = grupos.map(g=>`
+      <div class="month-group">
+        <p class="section-title" style="margin-top:22px;">${escapeHtml(g.label)}</p>
+        <div class="event-grid">
+        ${g.items.map(ev=>`
+          <div class="event-card" data-id="${ev.id}">
+            <div class="ev-name">${escapeHtml(ev.nombre)}</div>
+            <div class="ev-meta">${escapeHtml(ev.fecha || '')}<br>${escapeHtml(ev.recinto || '')}</div>
+            <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              ${ev.hasReport ? '<span class="badge ok"><span class="badge-dot"></span>Informe generado</span>' : '<span class="badge neutral"><span class="badge-dot"></span>Sin procesar</span>'}
+              ${isAdmin ? `<button class="btn danger small btn-delete-event" data-del-id="${ev.id}" data-del-name="${escapeHtml(ev.nombre)}" title="Eliminar evento">Eliminar</button>` : ''}
+            </div>
+          </div>
+        `).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('app').innerHTML = `
+    ${topBarHtml()}
+    <header class="hero">
+      <h1>Eventos</h1>
+      <p>Selecciona un evento para subir el listado de accesos y las invitaciones, o crea uno nuevo.</p>
+    </header>
+    <div class="actions" style="margin-bottom:22px;">
+      <button class="btn primary" id="btnNewEvent">+ Crear evento</button>
+      ${isAdmin ? `<button class="btn" id="btnGoUsers">Gestionar usuarios</button>` : ''}
+    </div>
+    ${createForm}
+    ${events.length > 0 ? searchBar : ''}
+    ${cards}
+  `;
+
+  const evSearch = document.getElementById('evSearch');
+  if(evSearch){
+    evSearch.focus();
+    evSearch.setSelectionRange(evSearch.value.length, evSearch.value.length);
+    evSearch.oninput = (e)=>{ eventSearchText = e.target.value; renderDashboard(); };
+  }
+
+  const logoutBtn = document.getElementById('btnLogout');
+  if(logoutBtn) logoutBtn.onclick = ()=>{ currentUser=null; screen='login'; render(); };
+
+  const btnNewEvent = document.getElementById('btnNewEvent');
+  if(btnNewEvent) btnNewEvent.onclick = ()=>{ showCreateEvent = true; uiError=''; renderDashboard(); };
+
+  const btnGoUsers = document.getElementById('btnGoUsers');
+  if(btnGoUsers) btnGoUsers.onclick = ()=>{ screen='users'; render(); };
+
+  const btnCancelEvent = document.getElementById('btnCancelEvent');
+  if(btnCancelEvent) btnCancelEvent.onclick = ()=>{ showCreateEvent = false; uiError=''; renderDashboard(); };
+
+  const btnSaveEvent = document.getElementById('btnSaveEvent');
+  if(btnSaveEvent) btnSaveEvent.onclick = async ()=>{
+    const nombre = document.getElementById('evNombre').value.trim();
+    const fechaDate = document.getElementById('evFechaDate').value;
+    const recinto = document.getElementById('evRecinto').value.trim();
+    if(!nombre){ uiError = 'Ponle un nombre al evento.'; renderDashboard(); return; }
+    const fecha = fechaDate ? fmtFechaLarga(fechaDate) : '';
+    const ev = { id: genId(), nombre, fecha, fechaDate: fechaDate || null, recinto, createdAt: Date.now(), createdBy: currentUser.username, hasReport:false };
+    const ok = await createEvent(ev);
+    if(!ok){ uiError = 'No se pudo crear el evento. Comprueba tu conexion e intentalo de nuevo.'; renderDashboard(); return; }
+    events = await loadEvents();
+    showCreateEvent = false; uiError = '';
+    renderDashboard();
+  };
+
+  document.querySelectorAll('.event-card').forEach(card=>{
+    card.onclick = ()=> openEvent(card.getAttribute('data-id'));
+  });
+
+  document.querySelectorAll('.btn-delete-event').forEach(btn=>{
+    btn.onclick = async (e)=>{
+      e.stopPropagation();
+      const id = btn.getAttribute('data-del-id');
+      const name = btn.getAttribute('data-del-name');
+      const sure = confirm('¿Seguro que quieres eliminar el evento "' + name + '"?\n\nSe borrara tambien su informe y el listado de accesos cargado. Esta accion no se puede deshacer.');
+      if(!sure) return;
+      btn.disabled = true; btn.textContent = 'Eliminando...';
+      const ok = await deleteEvent(id);
+      if(!ok){
+        alert('No se pudo eliminar el evento. Comprueba tu conexion e intentalo de nuevo.');
+        btn.disabled = false; btn.textContent = 'Eliminar';
+        return;
+      }
+      events = await loadEvents();
+      renderDashboard();
+    };
+  });
+}
+
+function renderUsers(){
+  document.getElementById('app').innerHTML = `
+    ${topBarHtml()}
+    <header class="hero">
+      <h1>Usuarios</h1>
+      <p>Crea cuentas para las personas que van a procesar eventos. Solo el Administrador ve esta pantalla.</p>
+    </header>
+    <div class="actions" style="margin-bottom:22px;">
+      <button class="btn" id="btnBackDash">Volver a eventos</button>
+    </div>
+    <div class="card">
+      <p class="section-title">Crear usuario</p>
+      <div class="field"><label class="field-label">Usuario</label><input type="text" id="newUserName"></div>
+      <div class="field"><label class="field-label">Contrasena</label><input type="password" id="newUserPass"></div>
+      <div class="field">
+        <label class="field-label">Rol</label>
+        <select id="newUserRole">
+          <option value="user">Usuario (solo procesa eventos existentes)</option>
+          <option value="admin">Administrador (acceso completo)</option>
+        </select>
+      </div>
+      <button class="btn primary" id="btnAddUser">Crear usuario</button>
+      <div class="error-msg" id="userError">${escapeHtml(uiError)}</div>
+    </div>
+    <div class="card">
+      <p class="section-title">Usuarios existentes</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Usuario</th><th>Rol</th><th></th></tr></thead>
+          <tbody>
+            ${users.map(u=>`
+              <tr>
+                <td>${escapeHtml(u.username)}</td>
+                <td>${u.role==='admin' ? 'Administrador' : 'Usuario'}</td>
+                <td>${u.username!==currentUser.username ? `<button class="btn small danger" data-user="${escapeHtml(u.username)}">Eliminar</button>` : ''}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  document.getElementById('btnLogout').onclick = ()=>{ currentUser=null; screen='login'; render(); };
+  document.getElementById('btnBackDash').onclick = ()=>{ screen='dashboard'; render(); };
+  document.getElementById('btnAddUser').onclick = async ()=>{
+    const u = document.getElementById('newUserName').value.trim();
+    const p = document.getElementById('newUserPass').value;
+    const role = document.getElementById('newUserRole').value;
+    if(!u || !p){ uiError = 'Rellena usuario y contrasena.'; renderUsers(); return; }
+    if(users.find(x=>x.username.toLowerCase()===u.toLowerCase())){ uiError = 'Ese usuario ya existe.'; renderUsers(); return; }
+    const passHash = await sha256Hex(p);
+    const ok = await createUser(u, passHash, role);
+    if(!ok){ uiError = 'No se pudo crear el usuario. Comprueba tu conexion e intentalo de nuevo.'; renderUsers(); return; }
+    users = await loadUsers();
+    uiError = '';
+    renderUsers();
+  };
+  document.querySelectorAll('[data-user]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const name = btn.getAttribute('data-user');
+      if(!confirm('Eliminar al usuario ' + name + '?')) return;
+      await deleteUser(name);
+      users = await loadUsers();
+      renderUsers();
+    };
+  });
+}
+
+async function openEvent(id){
+  currentEventId = id;
+  currentReport = await loadReport(id);
+  csvFileSel = null; zipFileSel = null;
+  screen = 'event'; render();
+}
+
+function getCurrentEvent(){ return events.find(e=>e.id===currentEventId); }
+
+function updateProgressBar(fraction, label){
+  const wrap = document.getElementById('progressWrap');
+  const bar = document.getElementById('progressBar');
+  const lab = document.getElementById('progressLabel');
+  if(wrap) wrap.classList.add('active');
+  if(bar) bar.style.width = Math.round(fraction*100) + '%';
+  if(lab) lab.textContent = label;
+}
+
+function reportTableHtml(report){
+  const rows = report.folders.map(f=>`
+    <tr>
+      <td>${escapeHtml(f.carpeta)}</td>
+      <td>${f.acceden}</td>
+      <td>${f.no_acceden}</td>
+      <td>${f.total}</td>
+    </tr>
+  `).join('');
+  return `
+    <div class="stats">
+      <div class="stat ok"><div class="stat-num">${report.totals.acceden}</div><div class="stat-label">Acceden</div></div>
+      <div class="stat bad"><div class="stat-num">${report.totals.no_acceden}</div><div class="stat-label">No acceden</div></div>
+      <div class="stat"><div class="stat-num">${report.totals.total}</div><div class="stat-label">Total invitaciones</div></div>
+      <div class="stat warn"><div class="stat-num">${report.unreadable.length}</div><div class="stat-label">Paginas sin lectura</div></div>
+    </div>
+    <div class="card">
+      <p class="section-title">Informe por carpeta</p>
+      <p class="section-sub">Generado ${fmtDate(report.generatedAt)} por ${escapeHtml(report.generatedBy||'')}</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Carpeta</th><th>Acceden</th><th>No acceden</th><th>Total invitaciones</th></tr></thead>
+          <tbody>
+            ${rows}
+            <tr class="total-row"><td>Total</td><td>${report.totals.acceden}</td><td>${report.totals.no_acceden}</td><td>${report.totals.total}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    ${report.unreadable.length>0 ? `
+    <div class="card">
+      <p class="section-title">Paginas que no se pudieron leer</p>
+      <p class="section-sub">Se han contado como "no acceden" por precaucion. Revisalas a mano si hace falta.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Carpeta</th><th>Archivo</th><th>Pagina</th></tr></thead>
+          <tbody>
+            ${report.unreadable.map(u=>`<tr><td>${escapeHtml(u.folder)}</td><td class="code-cell">${escapeHtml(u.file)}</td><td>${escapeHtml(String(u.page))}</td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : ''}
+  `;
+}
+
+function renderEvent(){
+  const ev = getCurrentEvent();
+  if(!ev){ screen='dashboard'; render(); return; }
+  const isAdmin = currentUser.role === 'admin';
+
+  const csvCard = `
+    <div class="card">
+      <div class="step-head"><div class="step-num">1</div><div class="step-title">Listado de accesos (CSV)</div></div>
+      <p class="step-desc">El archivo exportado del control de accesos, con los codigos y su fecha de entrada. Solo el Administrador lo sube.</p>
+      <div class="drop">
+        <button class="btn" id="btnCsv">Elegir archivo CSV</button>
+        <span class="file-status ${csvFileSel?'loaded':''}" id="csvStatus">${csvFileSel ? csvFileSel.name : 'Ningun archivo cargado'}</span>
+        <input type="file" id="csvInput" accept=".csv,text/csv">
+      </div>
+      <div class="actions" style="margin-top:14px;">
+        <button class="btn primary" id="btnSaveCsv" ${(!csvFileSel || csvSaving) ? 'disabled' : ''}>${csvSaving ? 'Guardando...' : (ev.hasCsv ? 'Reemplazar listado' : 'Guardar listado')}</button>
+      </div>
+      ${ev.hasCsv ? '<p class="empty-note" style="margin-top:10px;"><span class="badge ok"><span class="badge-dot"></span>Listado de accesos cargado</span></p>' : ''}
+    </div>
+  `;
+
+  const waitingCard = `
+    <div class="card">
+      <p class="section-title">Esperando el listado de accesos</p>
+      <p class="section-sub">El Administrador todavia no ha cargado el listado de accesos de este evento. En cuanto lo haga, podras subir tus invitaciones para verificarlas.</p>
+    </div>
+  `;
+
+  const waitingReportCard = `
+    <div class="card">
+      <p class="section-title">Informe todavia no disponible</p>
+      <p class="section-sub">El Administrador todavia no ha generado el informe de este evento. En cuanto este listo, podras descargarlo aqui en Excel y PDF.</p>
+    </div>
+  `;
+
+  const csvReadyBadge = `
+    <p class="empty-note" style="margin:0 0 18px;"><span class="badge ok"><span class="badge-dot"></span>Listado de accesos cargado · ya puedes verificar entradas</span></p>
+  `;
+
+  const zipCard = `
+    <div class="card">
+      <div class="step-head"><div class="step-num">${isAdmin?'2':'1'}</div><div class="step-title">Invitaciones (ZIP con carpetas)</div></div>
+      <p class="step-desc">El ZIP con una carpeta por cliente y dentro los PDF de las entradas enviadas.</p>
+      <div class="drop">
+        <button class="btn" id="btnZip">Elegir archivo ZIP</button>
+        <span class="file-status ${zipFileSel?'loaded':''}" id="zipStatus">${zipFileSel ? zipFileSel.name : 'Ningun archivo cargado'}</span>
+        <input type="file" id="zipInput" accept=".zip">
+      </div>
+    </div>
+    <div class="card">
+      <div class="step-head"><div class="step-num">${isAdmin?'3':'2'}</div><div class="step-title">Procesar</div></div>
+      <p class="step-desc">Puede tardar uno o dos minutos segun el numero de invitaciones.</p>
+      <div class="process-row">
+        <button class="btn primary" id="btnProcess" ${(!zipFileSel || processing) ? 'disabled' : ''}>Procesar entradas</button>
+        <div class="progress-wrap" id="progressWrap"><div class="progress-bar" id="progressBar"></div></div>
+        <span class="progress-label" id="progressLabel"></span>
+      </div>
+    </div>
+  `;
+
+  let uploadSection = '';
+  if(!isAdmin){
+    // El rol Usuario es solo de consulta/descarga: no genera ni reprocesa informes.
+    uploadSection = waitingReportCard;
+  } else if(!ev.hasCsv){
+    uploadSection = csvCard;
+  } else {
+    uploadSection = csvCard + zipCard;
+  }
+
+  const reportSection = currentReport ? `
+    ${reportTableHtml(currentReport)}
+    <div class="actions">
+      <button class="btn primary" id="btnDownloadXlsx">Descargar informe (Excel)</button>
+      <button class="btn primary" id="btnDownloadPdf">Descargar informe (PDF)</button>
+      ${isAdmin ? '<button class="btn" id="btnReprocess">Volver a procesar</button>' : ''}
+    </div>
+    <p class="empty-note" id="saveStatusNote">${isAdmin ? 'Este informe queda guardado. Se mantendra al volver a entrar en el evento, a no ser que lo proceses de nuevo.' : 'Informe generado por el Administrador.'}</p>
+  ` : '';
+
+  document.getElementById('app').innerHTML = `
+    ${topBarHtml()}
+    <header class="hero">
+      <p style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:0 0 8px;">Evento</p>
+      <h1>${escapeHtml(ev.nombre)}</h1>
+      <p>${escapeHtml(ev.fecha||'')} ${ev.recinto ? '· ' + escapeHtml(ev.recinto) : ''}</p>
+    </header>
+    <div class="actions" style="margin-bottom:10px;">
+      <button class="btn" id="btnBackDash">Volver a eventos</button>
+    </div>
+    ${currentReport ? reportSection : uploadSection}
+  `;
+
+  document.getElementById('btnLogout').onclick = ()=>{ currentUser=null; screen='login'; render(); };
+  document.getElementById('btnBackDash').onclick = ()=>{ screen='dashboard'; render(); };
+
+  if(currentReport){
+    document.getElementById('btnDownloadXlsx').onclick = ()=> downloadExcel(ev, currentReport);
+    document.getElementById('btnDownloadPdf').onclick = ()=> downloadPdf(ev, currentReport);
+    const btnReprocess = document.getElementById('btnReprocess');
+    if(btnReprocess) btnReprocess.onclick = ()=>{ currentReport = null; zipFileSel=null; renderEvent(); };
+    return;
+  }
+
+  if(!isAdmin) return; // El Usuario solo consulta/descarga; no hay nada mas que conectar aqui.
+
+  if(isAdmin){
+    const btnCsv = document.getElementById('btnCsv');
+    if(btnCsv) btnCsv.onclick = ()=> document.getElementById('csvInput').click();
+    const csvInputEl = document.getElementById('csvInput');
+    if(csvInputEl) csvInputEl.onchange = (e)=>{ csvFileSel = e.target.files[0] || null; renderEvent(); };
+    const btnSaveCsv = document.getElementById('btnSaveCsv');
+    if(btnSaveCsv) btnSaveCsv.onclick = handleSaveCsv;
+  }
+
+  if(ev.hasCsv){
+    document.getElementById('btnZip').onclick = ()=> document.getElementById('zipInput').click();
+    document.getElementById('zipInput').onchange = (e)=>{ zipFileSel = e.target.files[0] || null; renderEvent(); };
+    const btnProcess = document.getElementById('btnProcess');
+    if(btnProcess) btnProcess.onclick = handleProcess;
+  }
+}
+
+async function handleSaveCsv(){
+  if(!csvFileSel || csvSaving) return;
+  csvSaving = true;
+  renderEvent();
+  try{
+    const codeStatus = await parseCsvCodes(csvFileSel);
+    const ok = await saveEventCodes(currentEventId, codeStatus, currentUser.username);
+    if(ok){
+      events = await loadEvents();
+      csvFileSel = null;
+    } else {
+      alert('No se pudo guardar el listado. Comprueba tu conexion e intentalo de nuevo.');
+    }
+  } finally {
+    csvSaving = false;
+    renderEvent();
+  }
+}
+
+function splitCsvLine(line, delim){
+  const out=[]; let cur=''; let inQuotes=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(inQuotes){
+      if(ch === '"'){
+        if(line[i+1] === '"'){ cur+='"'; i++; } else { inQuotes=false; }
+      } else cur+=ch;
+    } else {
+      if(ch === '"') inQuotes=true;
+      else if(ch === delim){ out.push(cur); cur=''; }
+      else cur+=ch;
+    }
+  }
+  out.push(cur);
+  return out.map(c=>c.trim());
+}
+
+async function parseCsvCodes(file){
+  const text = await file.text();
+  const lines = text.split(/\r?\n/).filter(l=>l.trim().length>0);
+  const codeStatus = {};
+  if(lines.length===0) return codeStatus;
+  const delim = (lines[0].match(/;/g)||[]).length >= (lines[0].match(/,/g)||[]).length ? ';' : ',';
+  const header = splitCsvLine(lines[0], delim).map(h=>stripAccents(h).toLowerCase().replace(/\s+/g,''));
+  let codeIdx = header.findIndex(h=>h==='codigo');
+  if(codeIdx===-1) codeIdx = 0;
+  let fechaInIdx = header.findIndex(h=>h==='fechain');
+  if(fechaInIdx===-1) fechaInIdx = 7;
+  for(let i=1;i<lines.length;i++){
+    const cells = splitCsvLine(lines[i], delim);
+    if(cells.length <= Math.max(codeIdx, fechaInIdx)) continue;
+    const rawCode = (cells[codeIdx]||'').trim();
+    if(!rawCode) continue;
+    const code = normCode(rawCode);
+    const fechaIn = (cells[fechaInIdx]||'').trim();
+    const accessed = fechaIn.length > 0;
+    if(!codeStatus[code] || (accessed && !codeStatus[code].accessed)){
+      codeStatus[code] = { accessed, fecha: accessed ? fechaIn : '' };
+    }
+  }
+  return codeStatus;
+}
+
+// Un unico lienzo (canvas) reutilizado para todo el ZIP. Crear un canvas
+// nuevo por cada intento (con miles de paginas x varias resoluciones cada
+// una) puede agotar el limite de lienzos simultaneos que permite el
+// navegador, provocando que algunas paginas fallen sin motivo aparente.
+let sharedQrCanvas = null;
+function getSharedQrCanvas(){
+  if(!sharedQrCanvas){
+    sharedQrCanvas = document.createElement('canvas');
+  }
+  return sharedQrCanvas;
+}
+
+async function tryDecodeQrFromPage(page, knownCodes){
+  if(typeof jsQR !== 'function') return null;
+  // Probamos unas pocas resoluciones (de menor a mayor: la mas pequena ya es
+  // la mas rapida y en la practica acierta casi siempre). Si falla, vamos
+  // probando resoluciones mayores como red de seguridad.
+  const scales = [1.5, 2.5, 4];
+  for(const scale of scales){
+    const nc = await renderAndDecodeQr(page, scale);
+    if(nc && knownCodes.has(nc)) return nc;
+  }
+  return null;
+}
+
+async function renderAndDecodeQr(page, scale){
+  try{
+    const viewport = page.getViewport({ scale });
+    const canvas = getSharedQrCanvas();
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = false; // bordes nitidos: ayuda a leer QR pequenos
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const result = jsQR(imgData.data, imgData.width, imgData.height);
+    return result && result.data ? normCode(result.data) : null;
+  }catch(e){ return null; }
+}
+
+async function processZipFile(file, knownCodes, progressCb){
+  const zip = await JSZip.loadAsync(file);
+  const pdfEntries = [];
+  zip.forEach((relPath, entry)=>{
+    if(!entry.dir && /\.pdf$/i.test(entry.name)) pdfEntries.push(entry);
+  });
+  const ticketList = [];
+  const unreadable = [];
+  let pagesDone = 0;
+
+  function collectTextCandidates(items){
+    // Ademas de cada fragmento de texto suelto, reconstruimos tambien la
+    // "linea" completa agrupando por su posicion vertical: algunos
+    // visores de PDF (sobre todo en navegador) parten un codigo con
+    // espacio en medio (p.ej. "EJ4 QRGN8") en dos fragmentos separados
+    // ("EJ4" y "QRGN8"), y si solo miramos cada fragmento por separado
+    // nunca encontramos el codigo completo.
+    const candidates = [];
+    const lines = {};
+    items.forEach(it=>{
+      const s = (it.str||'').trim();
+      if(s) candidates.push(s);
+      const y = (it.transform && typeof it.transform[5]==='number') ? Math.round(it.transform[5]*2)/2 : null;
+      if(y === null) return;
+      const key = y.toFixed(1);
+      if(!lines[key]) lines[key] = [];
+      lines[key].push(it);
+    });
+    Object.values(lines).forEach(lineItems=>{
+      if(lineItems.length < 2) return;
+      lineItems.sort((a,b)=> (a.transform ? a.transform[4] : 0) - (b.transform ? b.transform[4] : 0));
+      const noSpace = lineItems.map(it=>it.str||'').join('').trim();
+      const withSpace = lineItems.map(it=>it.str||'').join(' ').replace(/\s+/g,' ').trim();
+      if(noSpace) candidates.push(noSpace);
+      if(withSpace && withSpace !== noSpace) candidates.push(withSpace);
+    });
+    return candidates;
+  }
+
+  async function extractCodeFromPage(pdf, p, knownCodes){
+    let code = null;
+    let page = null;
+    try{
+      page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      const candidates = collectTextCandidates(content.items);
+      const freq = {};
+      candidates.forEach(s=>{
+        // Los codigos de entrada varian mucho de un evento a otro (longitud
+        // y simbolos), asi que aqui solo aplicamos un filtro de sentido
+        // comun; la confirmacion real es que el codigo exista en el CSV.
+        if(s.length>=4 && s.length<=40) freq[s] = (freq[s]||0)+1;
+      });
+      // Un PDF de entrada suele repetir dos codigos (el de la entrada y la
+      // referencia de compra). Para no confundirlos, nos quedamos con el
+      // candidato que realmente existe en el listado de accesos (CSV).
+      let best = null, bestCount = 0;
+      Object.keys(freq).forEach(k=>{
+        const nk = normCode(k);
+        if(knownCodes.has(nk) && freq[k] > bestCount){ best = nk; bestCount = freq[k]; }
+      });
+      code = best;
+    }catch(e){ code = null; }
+    if(!code && page){
+      // El PDF no tiene texto reconocible en esta pagina (p.ej. entradas
+      // convertidas a imagen). Como ultimo recurso, renderizamos la pagina
+      // y leemos el codigo QR o de barras si lleva uno.
+      try{ code = await tryDecodeQrFromPage(page, knownCodes); }catch(e){ code = null; }
+    }
+    if(!code && page){
+      // Si ni el texto ni el QR han dado con un codigo que exista en el CSV,
+      // NO inventamos nada: es preferible marcarla como "no identificada"
+      // (y que se revise a mano) a asignarle un codigo falso que contaria
+      // como "no accede" sin que se note el error.
+    }
+    if(page){ try{ page.cleanup && page.cleanup(); }catch(e){} }
+    return code;
+  }
+
+  for(let i=0;i<pdfEntries.length;i++){
+    const entry = pdfEntries[i];
+    const parts = entry.name.split('/').filter(p=>p.length>0);
+    const folder = parts.length>=2 ? parts[parts.length-2] : 'SIN CARPETA';
+    const fileName = parts[parts.length-1];
+    let arrbuf;
+    try{ arrbuf = await entry.async('arraybuffer'); }catch(e){ continue; }
+    let pdf;
+    try{ pdf = await pdfjsLib.getDocument({data: arrbuf}).promise; }
+    catch(e){ unreadable.push({folder, file: fileName, page: '(archivo)'}); continue; }
+    const pageResults = []; // {p, code}
+    for(let p=1;p<=pdf.numPages;p++){
+      pagesDone++;
+      progressCb(i+1, pdfEntries.length, fileName + (pdf.numPages>1 ? ' (pagina ' + p + '/' + pdf.numPages + ')' : ''), pagesDone);
+      const code = await extractCodeFromPage(pdf, p, knownCodes);
+      pageResults.push({ p, code });
+      // Cedemos el control al navegador tras cada pagina (no solo cada
+      // archivo) para que la pestaña no parezca congelada en PDFs largos.
+      await new Promise(r=>setTimeout(r,0));
+    }
+    // Antes de cerrar este PDF, reintentamos aqui mismo cualquier pagina que
+    // haya fallado. Algunas fallan por una simple sobrecarga puntual del
+    // navegador, no por un problema real del PDF.
+    const failedHere = pageResults.filter(r=>!r.code);
+    if(failedHere.length){
+      await new Promise(r=>setTimeout(r, 150));
+      for(const fr of failedHere){
+        progressCb(i+1, pdfEntries.length, fileName + ' (reintentando pagina ' + fr.p + ')', pagesDone);
+        const code2 = await extractCodeFromPage(pdf, fr.p, knownCodes);
+        if(code2) fr.code = code2;
+        await new Promise(r=>setTimeout(r,0));
+      }
+    }
+    pageResults.forEach(r=>{
+      if(r.code) ticketList.push({ folder, code: r.code, file: fileName, page: r.p });
+      else unreadable.push({ folder, file: fileName, page: r.p });
+    });
+    // Liberamos este PDF antes de pasar al siguiente. Mantener muchos
+    // documentos abiertos a la vez en el navegador (en vez de cerrarlos al
+    // terminar cada uno) puede agotar sus recursos internos en ZIPs con
+    // muchos archivos, y hacer fallar paginas sin motivo real.
+    try{ pdf.destroy && pdf.destroy(); }catch(e){}
+  }
+
+  return { ticketList, unreadable };
+}
+
+// Los listados de accesos guardados antes de esta actualizacion se guardaron
+// como true/false; los guardados ahora incluyen tambien la fecha de acceso.
+// Esta funcion entiende los dos formatos para que nada deje de funcionar.
+function accessInfo(st){
+  if(st && typeof st === 'object') return { accessed: !!st.accessed, fecha: st.fecha || '' };
+  return { accessed: !!st, fecha: '' };
+}
+
+function buildReport(ticketList, unreadable, codeStatus){
+  const folderMap = {};
+  function ensure(f){ if(!folderMap[f]) folderMap[f] = { carpeta:f, acceden:0, no_acceden:0, total:0 }; return folderMap[f]; }
+  const details = [];
+  ticketList.forEach(t=>{
+    const f = ensure(t.folder);
+    f.total++;
+    const info = accessInfo(codeStatus[t.code]);
+    if(info.accessed) f.acceden++; else f.no_acceden++;
+    details.push({ carpeta: t.folder, codigo: t.code, archivo: t.file, pagina: t.page, accedio: info.accessed, fecha: info.fecha });
+  });
+  unreadable.forEach(u=>{
+    const f = ensure(u.folder);
+    f.total++;
+    f.no_acceden++;
+    details.push({ carpeta: u.folder, codigo: '(no identificado)', archivo: u.file, pagina: u.page, accedio: false, fecha: '' });
+  });
+  const folders = Object.values(folderMap).sort((a,b)=>a.carpeta.localeCompare(b.carpeta,'es'));
+  const totals = folders.reduce((acc,f)=>{ acc.acceden+=f.acceden; acc.no_acceden+=f.no_acceden; acc.total+=f.total; return acc; }, {acceden:0,no_acceden:0,total:0});
+  details.sort((a,b)=> a.carpeta.localeCompare(b.carpeta,'es') || (a.archivo||'').localeCompare(b.archivo||'','es') || (a.pagina-b.pagina));
+  return { folders, totals, unreadable, details };
+}
+
+async function handleProcess(){
+  if(!zipFileSel || processing) return;
+  processing = true;
+  renderEvent();
+  updateProgressBar(0, 'Leyendo listado de accesos...');
+  const codeStatus = await loadEventCodes(currentEventId);
+  if(!codeStatus){
+    alert('No se encontro el listado de accesos guardado para este evento. Pidele al Administrador que lo cargue.');
+    processing = false;
+    renderEvent();
+    return;
+  }
+  const knownCodes = new Set(Object.keys(codeStatus));
+  updateProgressBar(0, 'Leyendo invitaciones...');
+  const startTime = Date.now();
+  const { ticketList, unreadable } = await processZipFile(zipFileSel, knownCodes, (i,total,name,pagesDone)=>{
+    const secs = Math.round((Date.now()-startTime)/1000);
+    updateProgressBar(i/total, 'Leyendo PDF ' + i + ' de ' + total + ': ' + name + ' · ' + pagesDone + ' paginas leidas · ' + secs + 's');
+  });
+  const report = buildReport(ticketList, unreadable, codeStatus);
+  report.generatedAt = Date.now();
+  report.generatedBy = currentUser.username;
+  currentReport = report;
+
+  // El informe se guarda automaticamente en cuanto se genera, para que
+  // se mantenga al volver a entrar en el evento mas adelante.
+  await saveReport(currentEventId, currentReport);
+  await markEventReportSaved(currentEventId, currentReport.generatedAt);
+  events = await loadEvents();
+
+  processing = false;
+  renderEvent();
+}
+
+async function downloadExcel(ev, report){
+  const btn = document.getElementById('btnDownloadXlsx');
+  if(btn){ btn.disabled = true; btn.textContent = 'Generando Excel...'; }
+  try{
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'D1N1';
+    const ws = wb.addWorksheet('INVITACIONES');
+    ws.columns = [{ width: 26 }, { width: 14 }, { width: 16 }, { width: 22 }];
+
+    if(LOGO_SRC){
+      const imageId = wb.addImage({ base64: LOGO_SRC, extension: 'png' });
+      ws.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 170, height: 113 } });
+    }
+    for(let i=0;i<6;i++) ws.addRow([]);
+
+    let r = ws.addRow(['EVENTO:', ev.nombre || '']);
+    r.font = { bold: true };
+    r = ws.addRow(['FECHA:', ev.fecha || '']);
+    r.font = { bold: true };
+    r = ws.addRow(['RECINTO:', ev.recinto || '']);
+    r.font = { bold: true };
+    r = ws.addRow(['Informe generado:', fmtDate(report.generatedAt) + (report.generatedBy ? ' por ' + report.generatedBy : '')]);
+    r.font = { italic: true, color: { argb: 'FF9BA0A8' } };
+    ws.addRow([]);
+    ws.addRow([]);
+
+    r = ws.addRow(['CARPETA:', 'ACCEDEN', 'NO ACCEDEN', 'TOTAL INVITACIONES']);
+    r.font = { bold: true };
+
+    report.folders.forEach(f=>{
+      ws.addRow([f.carpeta, f.acceden, f.no_acceden, f.total]);
+    });
+
+    r = ws.addRow(['TOTAL:', report.totals.acceden, report.totals.no_acceden, report.totals.total]);
+    r.font = { bold: true };
+
+    if(Array.isArray(report.details) && report.details.length){
+      const wsD = wb.addWorksheet('DETALLE');
+      wsD.columns = [{ width: 26 }, { width: 18 }, { width: 10 }, { width: 12 }, { width: 22 }, { width: 34 }];
+      let rd = wsD.addRow(['CARPETA', 'CODIGO', 'ACCEDE', 'PAGINA', 'FECHA Y HORA DE ACCESO', 'ARCHIVO']);
+      rd.font = { bold: true };
+      report.details.forEach(d=>{
+        wsD.addRow([d.carpeta, d.codigo, d.accedio ? 'SI' : 'NO', d.pagina, d.fecha || '—', d.archivo]);
+      });
+    }
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const safeName = (ev.nombre || 'evento').replace(/[^a-zA-Z0-9]+/g, '_');
+    a.download = 'Informe_' + safeName + '.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e){
+    console.error('Error generando Excel', e);
+    alert('No se pudo generar el Excel. Vuelve a intentarlo; si sigue fallando, recarga la pagina (Ctrl+Shift+R) y vuelve a intentarlo.');
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = 'Descargar informe (Excel)'; }
+  }
+}
+
+async function downloadPdf(ev, report){
+  const btn = document.getElementById('btnDownloadPdf');
+  if(btn){ btn.disabled = true; btn.textContent = 'Generando PDF...'; }
+  try{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const GOLD = [201, 158, 58];
+    const GOLD_LIGHT = [250, 240, 214];
+    const DARK = [35, 35, 35];
+    const MUTED = [130, 130, 130];
+
+    function drawWatermarkAndFooter(pageNumber, pageCount){
+      doc.saveGraphicsState();
+      doc.setGState(new doc.GState({ opacity: 0.06 }));
+      const wmW = 130, wmH = 130 * (400/600);
+      if(LOGO_SRC) doc.addImage(LOGO_SRC, 'PNG', (pageW - wmW)/2, (pageH - wmH)/2, wmW, wmH);
+      doc.restoreGraphicsState();
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...MUTED);
+      doc.text('D1N1 . Control de accesos', 15, pageH - 10);
+      doc.text('Pagina ' + pageNumber + ' de ' + pageCount, pageW - 15, pageH - 10, { align: 'right' });
+    }
+
+    if(LOGO_SRC) doc.addImage(LOGO_SRC, 'PNG', 15, 12, 27, 18);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(...DARK);
+    doc.text('Informe de accesos', 48, 22);
+
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.7);
+    doc.line(15, 34, pageW - 15, 34);
+
+    let y = 42;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...DARK);
+    doc.text('EVENTO:', 15, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(ev.nombre || ''), 42, y);
+    y += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.text('FECHA:', 15, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(ev.fecha || ''), 42, y);
+    y += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.text('RECINTO:', 15, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(ev.recinto || ''), 42, y);
+    y += 7;
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...MUTED);
+    doc.text('Generado ' + fmtDate(report.generatedAt) + (report.generatedBy ? (' por ' + report.generatedBy) : ''), 15, y);
+    y += 5;
+
+    const body = report.folders.map(f=>[f.carpeta, String(f.acceden), String(f.no_acceden), String(f.total)]);
+    const totalRowIndex = body.length;
+    body.push(['TOTAL', String(report.totals.acceden), String(report.totals.no_acceden), String(report.totals.total)]);
+
+    doc.autoTable({
+      startY: y,
+      head: [['Carpeta', 'Acceden', 'No acceden', 'Total invitaciones']],
+      body: body,
+      theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 10, textColor: DARK, lineColor: [220,220,220], lineWidth: 0.2 },
+      headStyles: { fillColor: GOLD, textColor: [30,30,30], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [250,250,248] },
+      margin: { left: 15, right: 15, bottom: 20 },
+      didParseCell: function(data){
+        if(data.section === 'body' && data.row.index === totalRowIndex){
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = GOLD_LIGHT;
+        }
+      }
+    });
+
+    const pageCount = doc.internal.getNumberOfPages();
+    for(let p=1;p<=pageCount;p++){
+      doc.setPage(p);
+      drawWatermarkAndFooter(p, pageCount);
+    }
+
+    const safeName = (ev.nombre || 'evento').replace(/[^a-zA-Z0-9]+/g, '_');
+    doc.save('Informe_' + safeName + '.pdf');
+  } catch(e){
+    console.error('Error generando PDF', e);
+    alert('No se pudo generar el PDF. Vuelve a intentarlo; si sigue fallando, recarga la pagina (Ctrl+Shift+R) y vuelve a intentarlo.');
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = 'Descargar informe (PDF)'; }
+  }
+}
+
+function render(){
+  if(screen==='loading') renderLoading();
+  else if(screen==='setup') renderSetup();
+  else if(screen==='login') renderLogin();
+  else if(screen==='dashboard') renderDashboard();
+  else if(screen==='users') renderUsers();
+  else if(screen==='event') renderEvent();
+}
+
+loadLogo().then(init);
+</script>
+</body>
 </html>
