@@ -173,8 +173,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 // --- Version del programa -------------------------------------------------
 // Estos son los DOS UNICOS valores que hay que tocar en cada actualizacion.
 // Se muestran automaticamente en el pie de todas las pantallas de la web.
-const APP_VERSION = "1.0";
-const APP_UPDATED = "16/09/2026 12:10h";
+const APP_VERSION = "1.1";
+const APP_UPDATED = "27/10/2026 13:30h";
 document.getElementById('appFooter').textContent = 'WebEntradas ' + APP_VERSION + ' \u00b7 \u00daltima actualizaci\u00f3n: ' + APP_UPDATED;
 
 
@@ -922,7 +922,7 @@ async function tryDecodeQrFromPage(page, knownCodes){
   // Probamos unas pocas resoluciones (de menor a mayor: la mas pequena ya es
   // la mas rapida y en la practica acierta casi siempre). Si falla, vamos
   // probando resoluciones mayores como red de seguridad.
-  const scales = [1.5, 2.5, 4];
+  const scales = [1.5, 2.5, 4, 6];
   for(const scale of scales){
     const nc = await renderAndDecodeQr(page, scale);
     if(nc && knownCodes.has(nc)) return nc;
@@ -956,6 +956,26 @@ async function processZipFile(file, knownCodes, progressCb){
   const unreadable = [];
   let pagesDone = 0;
 
+  // Algunos PDF (p.ej. entradas de entradas.com) llevan la fuente con los
+  // caracteres desplazados: lo que en pantalla es "0041318..." en la capa de
+  // texto aparece como caracteres de control (codigo - 29). Para esos textos
+  // generamos tambien la version "desplazada +29" como candidato extra.
+  function shiftedCandidates(s){
+    const out = [];
+    if(s.length < 4 || s.length > 60) return out;
+    let ctrl = false;
+    for(let i=0;i<s.length;i++){ if(s.charCodeAt(i) < 32){ ctrl = true; break; } }
+    if(!ctrl) return out;
+    let r = '';
+    for(let i=0;i<s.length;i++){
+      const c = s.charCodeAt(i) + 29;
+      if(c > 126) return out;
+      r += String.fromCharCode(c);
+    }
+    out.push(r);
+    return out;
+  }
+
   function collectTextCandidates(items){
     // Ademas de cada fragmento de texto suelto, reconstruimos tambien la
     // "linea" completa agrupando por su posicion vertical: algunos
@@ -967,7 +987,7 @@ async function processZipFile(file, knownCodes, progressCb){
     const lines = {};
     items.forEach(it=>{
       const s = (it.str||'').trim();
-      if(s) candidates.push(s);
+      if(s){ candidates.push(s); shiftedCandidates(s).forEach(x=>candidates.push(x)); }
       const y = (it.transform && typeof it.transform[5]==='number') ? Math.round(it.transform[5]*2)/2 : null;
       if(y === null) return;
       const key = y.toFixed(1);
